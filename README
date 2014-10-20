@@ -1,0 +1,99 @@
+
+COMPILING
+---------
+Require: PETSc, PvFMM
+PETSC_DIR and PVFMM_DIR must be defined.
+PvFMM can be downloaded from: https://github.com/dmalhotra/pvfmm
+
+To compile:
+> make
+
+Troubleshooting:
+Modify Makefile as needed.
+
+Running executable:
+./bin/stokes_nomic -test_case 1 -rho 1e+6 -ref_tol 1e-6 -min_depth 1 -max_depth 15 -fmm_q 16 -fmm_m 10 -gmres_tol 1e-9 -gmres_iter 400 -ksp_gmres_modifiedgramschmidt -ksp_monitor
+See commandline options below for more detailes.
+
+
+
+
+
+RUNNING TESTS
+-------------
+Use scripts ./scripts/table*.sh
+
+./scripts/table1.sh  # Weak scaling to 2048 nodes, with high order discretization
+./scripts/table3.sh  # Constant coefficient stokes convergence
+./scripts/table5.sh  # Variable coefficient stokes convergence
+./scripts/table6.sh  # Flow around sphere convergence
+./scripts/table7.sh  # Flow around sphere: high and low order discretizations
+./scripts/table9.sh  # Single node performance results
+./scripts/table10.sh # Weak scaling to 2048 nodes, with low order discretization
+./scripts/table11.sh # Weak scaling to 1024 nodes, with high order discretization
+./scripts/table12.sh # Strong scaling to 1024 nodes, with high order discretization
+./scripts/table13.sh # Strong scaling to 1024 nodes, with low order discretization
+
+Re-run script after pending jobs finish.
+Results are written to ./results/table*.out
+
+Modify ./scripts/.submit_jobs.sh
+for new systems not recognized by the script
+
+On Stampede, add additional options to ./scripts/.job.stampede
+
+
+
+
+
+COMMANDLINE OPTIONS
+-------------------
+-test_case       0 - Constant coefficient
+                 1 - Synthetic variable coefficient
+                 2 - Spheres
+                 3 - Porous media
+
+-pt_cnt     <Int>    Number of spheres
+-pt_rad     <Real>   Sphere radius
+-jump_width <Real>   Jump width
+-rho        <Real>   Inf norm of \rho
+-ref_tol    <Real>   Tree refinement tolerance
+-min_depth  <Int>    Minimum tree depth
+-max_depth  <Int>    Maximum tree depth
+-fmm_q      <Int>    Chebyshev polynomial degree
+-fmm_m      <Int>    Multipole order (+ve even integer)
+-gmres_tol  <Real>   GMRES residual tolerance
+-gmres_iter <Int>    GMRES maximum iterations
+
+
+
+
+
+COMPILING PETSc and PvFMM ON STAMPEDE (TACC)
+--------------------------------------------
+
+Modules and environment variables:
+module swap mvapich2 impi
+module load fftw3
+module load cuda
+export MIC_LD_LIBRARY_PATH=/opt/apps/intel/13/composer_xe_2013.2.146/mkl/lib/mic:$MIC_LD_LIBRARY_PATH
+
+
+Configure and install PETSc-3.4.3:
+./configure --with-debugging=0 \
+--with-cc="mpicc -L${TACC_IMPI_LIB} -mt_mpi -mkl" \
+--with-cxx="mpicxx -L${TACC_IMPI_LIB} -mt_mpi -mkl" \
+--with-fc="mpifc -L${TACC_IMPI_LIB} -mt_mpi" \
+--with-scalar-type=real --with-clanguage=C++ --with-64-bit-indices=1 \
+--prefix=<petsc-install-path>
+
+Follow instructions and set PETSC_DIR
+
+
+Configure and install PvFMM:
+./configure CXXFLAGS="-mavx -wd3218 -wd2570" --with-fftw="$TACC_FFTW3_DIR" FLIBS=" " --prefix=<pvfmm-install-path> # For Phi
+./configure CXXFLAGS="-mavx -wd3218 -wd2570 -no-offload" --with-fftw="$TACC_FFTW3_DIR" FLIBS=" " \
+--with-cuda="$TACC_CUDA_DIR" NVCCFLAGS="-arch=compute_35 -code=sm_35" --prefix=<pvfmm-install-path # For CUDA>
+
+Follow instructions and set PVFMM_DIR
+
