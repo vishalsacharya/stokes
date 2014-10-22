@@ -25,6 +25,10 @@ static char help[] = "\n\
 #include <fmm_node.hpp>
 #include <fmm_tree.hpp>
 #include <cheb_node.hpp>
+
+#include <tree/tree_utils.h>
+#include <tree/advect_tree_semilag.h>
+
 typedef pvfmm::FMM_Node<pvfmm::Cheb_Node<double> > FMMNode_t;
 typedef pvfmm::FMM_Cheb<FMMNode_t> FMM_Mat_t;
 typedef pvfmm::FMM_Tree<FMM_Mat_t> FMM_Tree_t;
@@ -40,9 +44,9 @@ double SS_INF_ERR ;
 double SS_L2_ERR  ;
 
 PetscInt  TEST_CASE=0; // 0 - Constant coefficient
-                       // 1 - Synthetic variable coefficient
-                       // 2 - Sphere
-                       // 3 - Porous media
+// 1 - Synthetic variable coefficient
+// 2 - Sphere
+// 3 - Porous media
 
 PetscInt  ERROR_RESOLUTION=1;
 PetscInt  VTK_ORDER=0;
@@ -316,7 +320,7 @@ int tree2vec(FMMData fmm_data, Vec& Y){
     PetscScalar *Y_ptr;
     ierr = VecGetArray(Y, &Y_ptr);
 
-    #pragma omp parallel for
+#pragma omp parallel for
     for(size_t tid=0;tid<omp_p;tid++){
       size_t i_start=(nlist.size()* tid   )/omp_p;
       size_t i_end  =(nlist.size()*(tid+1))/omp_p;
@@ -361,7 +365,7 @@ int vec2tree(Vec& Y, FMMData fmm_data){
     const PetscScalar *Y_ptr;
     ierr = VecGetArrayRead(Y, &Y_ptr);
 
-    #pragma omp parallel for
+#pragma omp parallel for
     for(size_t tid=0;tid<omp_p;tid++){
       size_t i_start=(nlist.size()* tid   )/omp_p;
       size_t i_end  =(nlist.size()*(tid+1))/omp_p;
@@ -570,7 +574,7 @@ int FMMCreateShell(FMMData *fmm_data, Mat *A){
 
     std::vector<double> cheb_node_coord3=pvfmm::cheb_nodes<double>(cheb_deg, 3);
     int omp_p=omp_get_max_threads();
-    #pragma omp parallel for
+#pragma omp parallel for
     for(size_t tid=0;tid<omp_p;tid++){
       size_t i_start=(nlist.size()* tid   )/omp_p;
       size_t i_end  =(nlist.size()*(tid+1))/omp_p;
@@ -616,7 +620,7 @@ int FMMCreateShell(FMMData *fmm_data, Mat *A){
 
     std::vector<double> cheb_node_coord3=pvfmm::cheb_nodes<double>(cheb_deg, 3);
     int omp_p=omp_get_max_threads();
-    #pragma omp parallel for
+#pragma omp parallel for
     for(size_t tid=0;tid<omp_p;tid++){
       size_t i_start=(nlist.size()* tid   )/omp_p;
       size_t i_end  =(nlist.size()*(tid+1))/omp_p;
@@ -690,7 +694,7 @@ int stokes_err(Mat M, Vec U){
   size_t n_coeff3=(cheb_deg/ERROR_RESOLUTION+1)*(cheb_deg/ERROR_RESOLUTION+2)*(cheb_deg/ERROR_RESOLUTION+3)/6;
   size_t n_nodes3=(cheb_deg+1)*(cheb_deg+1)*(cheb_deg+1);
   std::vector<double> cheb_node_coord1=pvfmm::cheb_nodes<double>(cheb_deg, 1);
-  #pragma omp parallel for
+#pragma omp parallel for
   for(size_t i=0;i<cheb_node_coord1.size();i++){
     cheb_node_coord1[i]=cheb_node_coord1[i]*2.0-1.0;
   }
@@ -857,7 +861,7 @@ int mult(Mat M, Vec U, Vec Y){
   size_t n_coeff3=(cheb_deg+1)*(cheb_deg+2)*(cheb_deg+3)/6;
   size_t n_nodes3=(cheb_deg+1)*(cheb_deg+1)*(cheb_deg+1);
   std::vector<double> cheb_node_coord1=pvfmm::cheb_nodes<double>(cheb_deg, 1);
-  #pragma omp parallel for
+#pragma omp parallel for
   for(size_t i=0;i<cheb_node_coord1.size();i++){
     cheb_node_coord1[i]=cheb_node_coord1[i]*2.0-1.0;
   }
@@ -872,7 +876,7 @@ int mult(Mat M, Vec U, Vec Y){
 
     PetscScalar *U_ptr;
     ierr = VecGetArray(U, &U_ptr);
-    #pragma omp parallel for
+#pragma omp parallel for
     for(size_t tid=0;tid<omp_p;tid++){
       size_t i_start=(nlist.size()* tid   )/omp_p;
       size_t i_end  =(nlist.size()*(tid+1))/omp_p;
@@ -924,7 +928,7 @@ int mult(Mat M, Vec U, Vec Y){
     PetscScalar *Y_ptr;
     ierr = VecGetArray(Y, &Y_ptr);
 
-    #pragma omp parallel for
+#pragma omp parallel for
     for(size_t tid=0;tid<omp_p;tid++){
       size_t i_start=(nlist.size()* tid   )/omp_p;
       size_t i_end  =(nlist.size()*(tid+1))/omp_p;
@@ -1091,14 +1095,14 @@ int main(int argc,char **args){
           if(pt_coord_[i+1]>1.0+2*PT_RAD) overlap=true;
           if(pt_coord_[i+2]>1.0+2*PT_RAD) overlap=true;
           if(!overlap)
-          for(size_t i_=0;i_<i;i_+=COORD_DIM){
-            double r=0;
-            r+=(pt_coord_[i_+0]-pt_coord_[i+0])*(pt_coord_[i_+0]-pt_coord_[i+0]);
-            r+=(pt_coord_[i_+1]-pt_coord_[i+1])*(pt_coord_[i_+1]-pt_coord_[i+1]);
-            r+=(pt_coord_[i_+2]-pt_coord_[i+2])*(pt_coord_[i_+2]-pt_coord_[i+2]);
-            r=sqrt(r);
-            if(r<2.1*PT_RAD) overlap=true; // Overlap
-          }
+            for(size_t i_=0;i_<i;i_+=COORD_DIM){
+              double r=0;
+              r+=(pt_coord_[i_+0]-pt_coord_[i+0])*(pt_coord_[i_+0]-pt_coord_[i+0]);
+              r+=(pt_coord_[i_+1]-pt_coord_[i+1])*(pt_coord_[i_+1]-pt_coord_[i+1]);
+              r+=(pt_coord_[i_+2]-pt_coord_[i+2])*(pt_coord_[i_+2]-pt_coord_[i+2]);
+              r=sqrt(r);
+              if(r<2.1*PT_RAD) overlap=true; // Overlap
+            }
           if(overlap){
             pt_coord_[i+0]=c[0];
             pt_coord_[i+1]=c[1];
@@ -1253,6 +1257,54 @@ int main(int argc,char **args){
     // Compute error
     stokes_err(A,x);
 
+    // ======================================================================
+    // TBSLAS
+    // ======================================================================
+    {
+      vec2tree(x, fmm_data);
+      FMM_Tree_t* tvel_curr = fmm_data.tree;
+      tvel_curr->ConstructLET(pvfmm::FreeSpace);
+      tvel_curr->Write2File("result/output_vel_00_", CHEB_DEG);
+
+      // simulation parameters
+      int tstep       = 1;
+      double dt       = 0.5;
+      int num_rk_step = 1;
+      int tn          = 1;
+
+      FMM_Tree_t* tconc_curr = new FMM_Tree_t(comm);
+      FMM_Tree_t* tconc_next = new FMM_Tree_t(comm);
+      tbslas::clone_tree<double, FMM_Mat_t::FMMNode_t, FMM_Tree_t>
+          (*tvel_curr, *tconc_curr, 1);
+      tbslas::clone_tree<double, FMM_Mat_t::FMMNode_t, FMM_Tree_t>
+          (*tvel_curr, *tconc_next, 1);
+      tbslas::init_tree<double, FMM_Mat_t::FMMNode_t, FMM_Tree_t>
+          (*tconc_curr, tbslas::get_gaussian_field_1d<double,3>, 1);
+
+      char out_name_buffer[50];
+      snprintf(out_name_buffer, sizeof(out_name_buffer), "result/output_%d_", 0);
+      tconc_curr->Write2File(out_name_buffer, CHEB_DEG);
+
+      // TIME STEPPING
+      for (int tstep = 1; tstep < tn+1; tstep++) {
+        tconc_curr->ConstructLET(pvfmm::FreeSpace);
+        tbslas::advect_tree_semilag<double, FMM_Mat_t::FMMNode_t, FMM_Tree_t>
+            (*tvel_curr,
+             *tconc_curr,
+             *tconc_next,
+             tstep,
+             dt,
+             num_rk_step);
+
+        snprintf(out_name_buffer, sizeof(out_name_buffer), "result/output_%d_", tstep);
+        tconc_next->Write2File(out_name_buffer, CHEB_DEG);
+
+        tbslas::swap_trees_pointers(&tconc_curr, &tconc_next);
+      }
+      delete tconc_curr;
+      delete tconc_next;
+    }
+
     // Free work space.  All PETSc objects should be destroyed when they
     // are no longer needed.
     ierr = KSPDestroy(&ksp);CHKERRQ(ierr);
@@ -1269,4 +1321,3 @@ int main(int argc,char **args){
   ierr = PetscFinalize();
   return 0;
 }
-

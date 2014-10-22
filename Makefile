@@ -12,6 +12,7 @@ PSC_INC = -I$(PETSC_DIR)/include -I$(PETSC_DIR)/$(PETSC_ARCH)/include
 PSC_LIB = -L$(PETSC_DIR)/lib -L$(PETSC_DIR)/$(PETSC_ARCH)/lib -lpetsc
 
 TBSLAS_INC = -I$(TBSLAS_DIR)/src
+CXXFLAGS_TBSLAS = -std=c++0x 
 
 RM = rm -f
 MKDIRS = mkdir -p
@@ -30,26 +31,26 @@ ifeq ($(INTEL_OFFLOAD_OK),yes) # Have MIC
 
 $(BINDIR)/%: $(OBJDIR)/%.o
 	-@$(MKDIRS) $(dir $@)
-	$(CXX_PVFMM) $(CXXFLAGS_PVFMM) -D__MIC_ASYNCH__ $^       $(TBSLAS_INC) $(PSC_LIB) $(LDFLAGS_PVFMM) -o $@
-	$(CXX_PVFMM) $(CXXFLAGS_PVFMM) -no-offload      $^_nomic $(TBSLAS_INC) $(PSC_LIB) $(LDFLAGS_PVFMM) -o $@_nomic
+	$(CXX_PVFMM) $(CXXFLAGS_PVFMM) $(CXXFLAGS_TBSLAS) -D__MIC_ASYNCH__ $^       $(TBSLAS_INC) $(PSC_LIB) $(LDFLAGS_PVFMM) -o $@
+	$(CXX_PVFMM) $(CXXFLAGS_PVFMM) $(CXXFLAGS_TBSLAS) -no-offload      $^_nomic $(TBSLAS_INC) $(PSC_LIB) $(LDFLAGS_PVFMM) -o $@_nomic
 
 $(OBJDIR)/%.o: $(SRCDIR)/%.cpp
 	-@$(MKDIRS) $(dir $@)
-	$(CXX_PVFMM) $(CXXFLAGS_PVFMM) -D__MIC_ASYNCH__ $(TBSLAS_INC) $(PSC_INC) -I$(INCDIR) -c $^ -o $@
-	$(CXX_PVFMM) $(CXXFLAGS_PVFMM) -no-offload      $(TBSLAS_INC) $(PSC_INC) -I$(INCDIR) -c $^ -o $@_nomic
+	$(CXX_PVFMM) $(CXXFLAGS_PVFMM) $(CXXFLAGS_TBSLAS) -D__MIC_ASYNCH__ $(TBSLAS_INC) $(PSC_INC) -I$(INCDIR) -c $^ -o $@
+	$(CXX_PVFMM) $(CXXFLAGS_PVFMM) $(CXXFLAGS_TBSLAS) -no-offload      $(TBSLAS_INC) $(PSC_INC) -I$(INCDIR) -c $^ -o $@_nomic
 
 else
 ifeq ($(NVCC_PVFMM),no) # No MIC, No GPU
 
 $(BINDIR)/%: $(OBJDIR)/%.o
 	-@$(MKDIRS) $(dir $@)
-	$(CXX_PVFMM) $(CXXFLAGS_PVFMM)                  $^   $(PSC_LIB) $(LDFLAGS_PVFMM) -o $@
+	$(CXX_PVFMM) $(CXXFLAGS_PVFMM) $(CXXFLAGS_TBSLAS)                  $^   $(PSC_LIB) $(LDFLAGS_PVFMM) -o $@
 
 else # Have GPU
 
 $(BINDIR)/%: $(OBJDIR)/%.o
 	-@$(MKDIRS) $(dir $@)
-	$(CXX_PVFMM) $(CXXFLAGS_PVFMM)                  $^   $(PSC_LIB) $(LDFLAGS_PVFMM) -o $@
+	$(CXX_PVFMM) $(CXXFLAGS_PVFMM) $(CXXFLAGS_TBSLAS)                  $^   $(PSC_LIB) $(LDFLAGS_PVFMM) -o $@
 	mv $@ $@_gpu
 	touch $@
 	chmod +x $@
@@ -58,7 +59,7 @@ endif
 
 $(OBJDIR)/%.o: $(SRCDIR)/%.cpp
 	-@$(MKDIRS) $(dir $@)
-	$(CXX_PVFMM) $(CXXFLAGS_PVFMM)                  $(TBSLAS_INC) $(PSC_INC) -I$(INCDIR) -c $^ -o $@
+	$(CXX_PVFMM) $(CXXFLAGS_PVFMM) $(CXXFLAGS_TBSLAS)                  $(TBSLAS_INC) $(PSC_INC) -I$(INCDIR) -c $^ -o $@
 
 endif
 
