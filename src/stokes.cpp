@@ -1262,9 +1262,84 @@ int main(int argc,char **args){
     // ======================================================================
     {
       vec2tree(x, fmm_data);
-      FMM_Tree_t* tvel_curr = fmm_data.tree;
-      tvel_curr->ConstructLET(pvfmm::FreeSpace);
-      tvel_curr->Write2File("result/output_vel_00_", CHEB_DEG);
+      FMM_Tree_t* tree_curr = fmm_data.tree;
+      FMM_Tree_t* tvel;
+      switch(TEST_CASE) {
+        case 2:
+          // convert velocity tree
+          {
+            FMM_Tree_t* tree_next = new FMM_Tree_t(comm);
+            tbslas::clone_tree<double, FMM_Mat_t::FMMNode_t, FMM_Tree_t>
+                (*tree_curr, *tree_next, 3);
+
+            // TODO: probably you do not need to trees for conversion of the values
+            FMM_Mat_t::FMMNode_t* n_curr = tree_curr->PostorderFirst();
+            FMM_Mat_t::FMMNode_t* n_next = tree_next->PostorderFirst();
+            int data_dof = n_curr->DataDOF();
+            int cheb_deg = n_curr->ChebDeg();
+            int sdim     = tree_curr->Dim();
+
+            // compute chebychev points positions on the fly
+            std::vector<double> cheb_pos = pvfmm::cheb_nodes<double>(cheb_deg, sdim);
+            int num_points               = cheb_pos.size()/sdim;
+
+            while (n_curr != NULL) {
+              if(!n_curr->IsGhost() && n_curr->IsLeaf()) break;
+              n_curr = tree_curr->PostorderNxt(n_curr);
+            }
+            while (n_next != NULL) {
+              if(!n_next->IsGhost() && n_next->IsLeaf()) break;
+              n_next = tree_next->PostorderNxt(n_next);
+            }
+
+            while (n_curr != NULL && n_next != NULL) {
+              if (n_curr->IsLeaf() && !n_curr->IsGhost()) {
+                double length      = static_cast<double>(std::pow(0.5, n_curr->Depth()));
+                double* node_coord = n_curr->Coord();
+
+                printf("CONVERTING VALUES NODE: [%f, %f, %f]\n",
+                       node_coord[0],
+                       node_coord[1],
+                       node_coord[2]);
+
+                // TODO: figure out a way to optimize this part.
+                std::vector<double> points_pos(cheb_pos.size());
+                // scale the cheb points
+                for (int i = 0; i < num_points; i++) {
+                  points_pos[i*sdim+0] = node_coord[0] + length * cheb_pos[i*sdim+0];
+                  points_pos[i*sdim+1] = node_coord[1] + length * cheb_pos[i*sdim+1];
+                  points_pos[i*sdim+2] = node_coord[2] + length * cheb_pos[i*sdim+2];
+                }
+                // TODO: do no need to allocate these two vector in each iteration.
+                //     : move them to the outside the loop
+                std::vector<double> points_val(num_points*data_dof);
+                std::vector<double> points_val_layout(num_points*data_dof);
+                tbslas::NodeFieldFunctor<double, FMM_Mat_t::FMMNode_t>
+                    vel_functor(tree_curr->RootNode());
+                vel_functor(points_pos.data(), num_points, points_val.data());
+                for (int i=0; i < num_points; i++) {
+                  points_val_layout[i+num_points*0] = points_val[i*data_dof+0] - 1;
+                  points_val_layout[i+num_points*1] = points_val[i*data_dof+1];
+                  points_val_layout[i+num_points*2] = points_val[i*data_dof+2];
+                }
+
+                pvfmm::cheb_approx<double, double>(points_val_layout.data(),
+                                                   cheb_deg,
+                                                   data_dof,
+                                                   &(n_next->ChebData()[0])
+                                                   );
+              }
+              n_curr = tree_curr->PostorderNxt(n_curr);
+              n_next = tree_next->PostorderNxt(n_next);
+            }
+            tvel = tree_next;
+          } break;
+        default:
+          tvel = tree_curr;
+      }
+
+      tvel->Write2File("result/output_vel_00_", CHEB_DEG);
+      tvel->ConstructLET(pvfmm::FreeSpace);
 
       // simulation parameters
       int tstep       = 1;
@@ -1275,26 +1350,21 @@ int main(int argc,char **args){
       FMM_Tree_t* tconc_curr = new FMM_Tree_t(comm);
       FMM_Tree_t* tconc_next = new FMM_Tree_t(comm);
       tbslas::clone_tree<double, FMM_Mat_t::FMMNode_t, FMM_Tree_t>
-          (*tvel_curr, *tconc_curr, 1);
-      tbslas::clone_tree<double, FMM_Mat_t::FMMNode_t, FMM_Tree_t>
-          (*tvel_curr, *tconc_next, 1);
+          (*tvel, *tconc_curr, 1);
       tbslas::init_tree<double, FMM_Mat_t::FMMNode_t, FMM_Tree_t>
           (*tconc_curr, tbslas::get_gaussian_field_1d<double,3>, 1);
-
       char out_name_buffer[50];
       snprintf(out_name_buffer, sizeof(out_name_buffer), "result/output_%d_", 0);
       tconc_curr->Write2File(out_name_buffer, CHEB_DEG);
+
+      tbslas::clone_tree<double, FMM_Mat_t::FMMNode_t, FMM_Tree_t>
+          (*tvel, *tconc_next, 1);
 
       // TIME STEPPING
       for (int tstep = 1; tstep < tn+1; tstep++) {
         tconc_curr->ConstructLET(pvfmm::FreeSpace);
         tbslas::advect_tree_semilag<double, FMM_Mat_t::FMMNode_t, FMM_Tree_t>
-            (*tvel_curr,
-             *tconc_curr,
-             *tconc_next,
-             tstep,
-             dt,
-             num_rk_step);
+            (*tvel, *tconc_curr, *tconc_next, tstep, dt, num_rk_step);
 
         snprintf(out_name_buffer, sizeof(out_name_buffer), "result/output_%d_", tstep);
         tconc_next->Write2File(out_name_buffer, CHEB_DEG);
