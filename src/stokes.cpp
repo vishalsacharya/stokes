@@ -1342,17 +1342,18 @@ int main(int argc,char **args){
       tvel->ConstructLET(pvfmm::FreeSpace);
 
       // simulation parameters
+      double dx = std::pow(0.5, MAXDEPTH);
       int tstep       = 1;
-      double dt       = 0.5;
+      double dt       = dx/CHEB_DEG;
       int num_rk_step = 1;
-      int tn          = 1;
+      int tn          = 10;
 
       FMM_Tree_t* tconc_curr = new FMM_Tree_t(comm);
       FMM_Tree_t* tconc_next = new FMM_Tree_t(comm);
       tbslas::clone_tree<double, FMM_Mat_t::FMMNode_t, FMM_Tree_t>
           (*tvel, *tconc_curr, 1);
       tbslas::init_tree<double, FMM_Mat_t::FMMNode_t, FMM_Tree_t>
-          (*tconc_curr, tbslas::get_gaussian_field_1d<double,3>, 1);
+          (*tconc_curr, tbslas::get_gaussian_field<double,3>, 1);
       char out_name_buffer[50];
       snprintf(out_name_buffer, sizeof(out_name_buffer), "result/output_%d_", 0);
       tconc_curr->Write2File(out_name_buffer, CHEB_DEG);
@@ -1362,6 +1363,8 @@ int main(int argc,char **args){
 
       // TIME STEPPING
       for (int tstep = 1; tstep < tn+1; tstep++) {
+        printf("============================================================\n");
+        printf("TIME STEP: %d DT: %f CURRENT TIME: %f\n", tstep, dt, dt*tstep);
         tconc_curr->ConstructLET(pvfmm::FreeSpace);
         tbslas::advect_tree_semilag<double, FMM_Mat_t::FMMNode_t, FMM_Tree_t>
             (*tvel, *tconc_curr, *tconc_next, tstep, dt, num_rk_step);
