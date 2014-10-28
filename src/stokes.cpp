@@ -1346,14 +1346,14 @@ int main(int argc,char **args){
       int tstep       = 1;
       double dt       = dx/CHEB_DEG;
       int num_rk_step = 1;
-      int tn          = 10;
+      int tn          = 100;
 
       FMM_Tree_t* tconc_curr = new FMM_Tree_t(comm);
       FMM_Tree_t* tconc_next = new FMM_Tree_t(comm);
       tbslas::clone_tree<double, FMM_Mat_t::FMMNode_t, FMM_Tree_t>
           (*tvel, *tconc_curr, 1);
       tbslas::init_tree<double, FMM_Mat_t::FMMNode_t, FMM_Tree_t>
-          (*tconc_curr, tbslas::get_gaussian_field<double,3>, 1);
+          (*tconc_curr, tbslas::get_gaussian_field_yext<double,3>, 1);
       char out_name_buffer[50];
       snprintf(out_name_buffer, sizeof(out_name_buffer), "result/output_%d_", 0);
       tconc_curr->Write2File(out_name_buffer, CHEB_DEG);
@@ -1372,7 +1372,7 @@ int main(int argc,char **args){
         snprintf(out_name_buffer, sizeof(out_name_buffer), "result/output_%d_", tstep);
         tconc_next->Write2File(out_name_buffer, CHEB_DEG);
 
-        tbslas::swap_trees_pointers(&tconc_curr, &tconc_next);
+        tbslas::swap_pointers(&tconc_curr, &tconc_next);
       }
       delete tconc_curr;
       delete tconc_next;
