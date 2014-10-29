@@ -1314,8 +1314,8 @@ int main(int argc,char **args){
                 //     : move them to the outside the loop
                 std::vector<double> points_val(num_points*data_dof);
                 std::vector<double> points_val_layout(num_points*data_dof);
-                tbslas::NodeFieldFunctor<double, FMM_Mat_t::FMMNode_t>
-                    vel_functor(tree_curr->RootNode());
+                tbslas::NodeFieldFunctor<double, FMM_Tree_t>
+                    vel_functor(tree_curr);
                 vel_functor(points_pos.data(), num_points, points_val.data());
                 for (int i=0; i < num_points; i++) {
                   points_val_layout[i+num_points*0] = points_val[i*data_dof+0] - 1;
@@ -1342,11 +1342,11 @@ int main(int argc,char **args){
       tvel->ConstructLET(pvfmm::FreeSpace);
 
       // simulation parameters
-      double dx = std::pow(0.5, MAXDEPTH);
+      double dx       = pow(0.5, MAXDEPTH);
       int tstep       = 1;
       double dt       = dx/CHEB_DEG;
       int num_rk_step = 1;
-      int tn          = 100;
+      int tn          = 1;
 
       FMM_Tree_t* tconc_curr = new FMM_Tree_t(comm);
       FMM_Tree_t* tconc_next = new FMM_Tree_t(comm);
