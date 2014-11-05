@@ -29,8 +29,8 @@ static char help[] = "\n\
 #include <cheb_node.hpp>
 
 // TBSLAS INCLUDES
-#include <io_utils.h>
-#include <profile.h>
+#include <utils/common.h>
+#include <utils/profile.h>
 #include <tree/tree_utils.h>
 #include <tree/advect_tree_semilag.h>
 
