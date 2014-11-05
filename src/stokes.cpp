@@ -20,12 +20,17 @@ static char help[] = "\n\
 #include <petscksp.h>
 #include <cassert>
 #include <cstring>
+
+// PVFMM INCLUDES
 #include <profile.hpp>
 #include <fmm_cheb.hpp>
 #include <fmm_node.hpp>
 #include <fmm_tree.hpp>
 #include <cheb_node.hpp>
 
+// TBSLAS INCLUDES
+#include <io_utils.h>
+#include <profile.h>
 #include <tree/tree_utils.h>
 #include <tree/advect_tree_semilag.h>
 
@@ -453,7 +458,12 @@ int FMM_Init(MPI_Comm& comm, FMMData *fmm_data){
     }
     tree_data.pt_coord=pt_coord;
 
-    //tree->Write2File("result/rho",VTK_ORDER);
+    char out_name_buffer[300];
+
+    snprintf(out_name_buffer, sizeof(out_name_buffer),
+             "%s/stokes_rho_%d_", tbslas::get_result_dir().c_str(), 0);
+
+    tree->Write2File(out_name_buffer,VTK_ORDER);
     delete tree;
   }
   { // Tree Construction.
@@ -1265,7 +1275,10 @@ int main(int argc,char **args){
       FMM_Tree_t* tree_curr = fmm_data.tree;
       FMM_Tree_t* tvel;
       switch(TEST_CASE) {
+        case 0:
+        case 1:
         case 2:
+        case 3:
           // convert velocity tree
           {
             FMM_Tree_t* tree_next = new FMM_Tree_t(comm);
@@ -1297,11 +1310,6 @@ int main(int argc,char **args){
                 double length      = static_cast<double>(std::pow(0.5, n_curr->Depth()));
                 double* node_coord = n_curr->Coord();
 
-                printf("CONVERTING VALUES NODE: [%f, %f, %f]\n",
-                       node_coord[0],
-                       node_coord[1],
-                       node_coord[2]);
-
                 // TODO: figure out a way to optimize this part.
                 std::vector<double> points_pos(cheb_pos.size());
                 // scale the cheb points
@@ -1310,10 +1318,12 @@ int main(int argc,char **args){
                   points_pos[i*sdim+1] = node_coord[1] + length * cheb_pos[i*sdim+1];
                   points_pos[i*sdim+2] = node_coord[2] + length * cheb_pos[i*sdim+2];
                 }
+
                 // TODO: do no need to allocate these two vector in each iteration.
                 //     : move them to the outside the loop
                 std::vector<double> points_val(num_points*data_dof);
                 std::vector<double> points_val_layout(num_points*data_dof);
+
                 tbslas::NodeFieldFunctor<double, FMM_Tree_t>
                     vel_functor(tree_curr);
                 vel_functor(points_pos.data(), num_points, points_val.data());
@@ -1328,6 +1338,7 @@ int main(int argc,char **args){
                                                    data_dof,
                                                    &(n_next->ChebData()[0])
                                                    );
+
               }
               n_curr = tree_curr->PostorderNxt(n_curr);
               n_next = tree_next->PostorderNxt(n_next);
@@ -1338,24 +1349,31 @@ int main(int argc,char **args){
           tvel = tree_curr;
       }
 
-      tvel->Write2File("result/output_vel_00_", CHEB_DEG);
+      char out_name_buffer[300];
+      snprintf(out_name_buffer, sizeof(out_name_buffer),
+               "%s/stokes_vel_%d_", tbslas::get_result_dir().c_str(), 0);
+      tvel->Write2File(out_name_buffer, CHEB_DEG);
       tvel->ConstructLET(pvfmm::FreeSpace);
 
       // simulation parameters
       double dx       = pow(0.5, MAXDEPTH);
       int tstep       = 1;
-      double dt       = dx/CHEB_DEG;
+      double dt       = dx;
       int num_rk_step = 1;
       int tn          = 1;
+
+      tbslas::Profile<double>::Enable(true, &comm);
 
       FMM_Tree_t* tconc_curr = new FMM_Tree_t(comm);
       FMM_Tree_t* tconc_next = new FMM_Tree_t(comm);
       tbslas::clone_tree<double, FMM_Mat_t::FMMNode_t, FMM_Tree_t>
           (*tvel, *tconc_curr, 1);
+
       tbslas::init_tree<double, FMM_Mat_t::FMMNode_t, FMM_Tree_t>
           (*tconc_curr, tbslas::get_gaussian_field_yext<double,3>, 1);
-      char out_name_buffer[50];
-      snprintf(out_name_buffer, sizeof(out_name_buffer), "result/output_%d_", 0);
+
+      snprintf(out_name_buffer, sizeof(out_name_buffer),
+               "%s/stokes_val_%d_", tbslas::get_result_dir().c_str(),  0);
       tconc_curr->Write2File(out_name_buffer, CHEB_DEG);
 
       tbslas::clone_tree<double, FMM_Mat_t::FMMNode_t, FMM_Tree_t>
@@ -1369,13 +1387,16 @@ int main(int argc,char **args){
         tbslas::advect_tree_semilag<double, FMM_Mat_t::FMMNode_t, FMM_Tree_t>
             (*tvel, *tconc_curr, *tconc_next, tstep, dt, num_rk_step);
 
-        snprintf(out_name_buffer, sizeof(out_name_buffer), "result/output_%d_", tstep);
+        snprintf(out_name_buffer, sizeof(out_name_buffer),
+                 "%s/stokes_val_%d_", tbslas::get_result_dir().c_str(), tstep);
         tconc_next->Write2File(out_name_buffer, CHEB_DEG);
 
         tbslas::swap_pointers(&tconc_curr, &tconc_next);
       }
       delete tconc_curr;
       delete tconc_next;
+
+      tbslas::Profile<double>::print(&comm);
     }
 
     // Free work space.  All PETSc objects should be destroyed when they
@@ -1387,7 +1408,7 @@ int main(int argc,char **args){
 
     // Delete fmm data
     FMMDestroy(&fmm_data);
-    pvfmm::Profile::print(&comm);
+
   }
 
   disp_result();
