@@ -29,10 +29,12 @@ static char help[] = "\n\
 #include <cheb_node.hpp>
 
 // TBSLAS INCLUDES
+// Enable profiling
+#define __TBSLAS_PROFILE__ 5
 #include <utils/common.h>
-#include <utils/profile.h>
 #include <tree/tree_utils.h>
 #include <tree/advect_tree_semilag.h>
+#include <utils/profile.h>
 
 typedef pvfmm::FMM_Node<pvfmm::Cheb_Node<double> > FMMNode_t;
 typedef pvfmm::FMM_Cheb<FMMNode_t> FMM_Mat_t;
@@ -48,36 +50,39 @@ double AVG_L2_ERR ;
 double SS_INF_ERR ;
 double SS_L2_ERR  ;
 
-PetscInt  TEST_CASE=0; // 0 - Constant coefficient
-// 1 - Synthetic variable coefficient
-// 2 - Sphere
-// 3 - Porous media
+// TEST_CASE: 0 - Constant coefficient
+// TEST_CASE: 1 - Synthetic variable coefficient
+// TEST_CASE: 2 - Sphere
+// TEST_CASE: 3 - Porous media
+PetscInt   TEST_CASE        = 0;
 
-PetscInt  ERROR_RESOLUTION=1;
-PetscInt  VTK_ORDER=0;
-PetscInt  INPUT_DOF=3;
-PetscReal  SCAL_EXP=1.0;
-PetscBool  PERIODIC=PETSC_FALSE;
-PetscBool TREE_ONLY=PETSC_FALSE;
+PetscInt   ERROR_RESOLUTION = 1;
+PetscInt   VTK_ORDER        = 8;
+PetscInt   INPUT_DOF        = 3;
+PetscReal  SCAL_EXP         = 1.0;
+PetscBool  PERIODIC         = PETSC_FALSE;
+PetscBool  TREE_ONLY        = PETSC_FALSE;
 
-PetscInt  MAXDEPTH  =MAX_DEPTH;// Maximum tree depth
-PetscInt  MINDEPTH   =4;       // Minimum tree depth
-PetscReal       TOL  =1e-3;    // Tolerance
-PetscReal GMRES_TOL  =1e-6;    // Fine mesh GMRES tolerance
+PetscInt   MAXDEPTH         = MAX_DEPTH; // Maximum tree depth
+PetscInt   MINDEPTH         = 4;         // Minimum tree depth
+PetscReal  TOL              = 1e-3;      // Tolerance
+PetscReal  GMRES_TOL        = 1e-6;      // Fine mesh GMRES tolerance
 
-PetscInt  CHEB_DEG  =14;       // Fine mesh Cheb. order
-PetscInt MUL_ORDER  =10;       // Fine mesh mult  order
+PetscInt   CHEB_DEG         = 14;        // Fine mesh Cheb. order
+PetscInt   MUL_ORDER        = 10;        // Fine mesh mult  order
 
-PetscInt MAX_ITER  =200;
+PetscInt   MAX_ITER         = 200;
 
-PetscInt  PT_CNT=1;  // Number of spheres
-PetscReal PT_RAD=0.15;
-PetscReal JUMP_WIDTH=0.001;
-std::vector<double> pt_coord;
+PetscInt   PT_CNT           = 1;         // Number of spheres
+PetscReal  PT_RAD           = 0.15;
+PetscReal  JUMP_WIDTH       = 0.001;
 
-PetscReal f_max=0;
-PetscReal rho_=1000000;
-//PetscReal L=500;
+PetscReal  f_max            = 0;
+PetscReal  rho_             = 1000000;
+
+PetscInt   NTSTEP           = 1;
+//PetscReal  L                = 500;
+std::vector<double>  pt_coord;
 
 void rho(const double* coord, int n, double* out){ //Input function
   int dof=1;
@@ -286,7 +291,6 @@ void u_ref(const double* coord, int n, double* out){ //Analytical solution
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-
 struct FMMData{
   const pvfmm::Kernel<double>* kernel;
   FMM_Mat_t* fmm_mat;
@@ -389,7 +393,6 @@ int vec2tree(Vec& Y, FMMData fmm_data){
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-
 int FMM_Init(MPI_Comm& comm, FMMData *fmm_data){
   int myrank, np;
   MPI_Comm_rank(comm, &myrank);
@@ -965,7 +968,6 @@ int mult(Mat M, Vec U, Vec Y){
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-
 int disp_result(){
   MPI_Comm comm=MPI_COMM_WORLD;
   PetscMPIInt    rank,size;
@@ -1025,6 +1027,8 @@ int disp_result(){
 }
 
 int main(int argc,char **args){
+  MPI_Init(&argc,&args);
+
   PetscErrorCode ierr;
   PetscInitialize(&argc,&args,0,help);
 
@@ -1056,8 +1060,9 @@ int main(int argc,char **args){
   PetscOptionsGetReal(NULL,"-jump_width" ,&JUMP_WIDTH ,NULL);
 
   PetscOptionsGetReal(NULL,       "-rho" ,&    rho_   ,NULL);
-  // -------------------------------------------------------------------
+  PetscOptionsGetInt (NULL,        "-tn" ,&NTSTEP     ,NULL);
 
+  // -------------------------------------------------------------------
   if(PT_CNT==1){
     pt_coord.push_back(0.5);
     pt_coord.push_back(0.5);
@@ -1165,16 +1170,15 @@ int main(int argc,char **args){
     }
   }
 
+  // Initialize FMM
+  FMMData fmm_data;
+  FMM_Init(comm, &fmm_data);
+
   {
     /* -------------------------------------------------------------------
        Compute the matrix and right-hand-side vector that define
        the linear system, Ax = b.
        ------------------------------------------------------------------- */
-
-    // Initialize FMM
-    FMMData fmm_data;
-    FMM_Init(comm, &fmm_data);
-
     if(TREE_ONLY){
       pvfmm::Profile::print(&comm);
       disp_result();
@@ -1267,137 +1271,7 @@ int main(int argc,char **args){
     // Compute error
     stokes_err(A,x);
 
-    // ======================================================================
-    // TBSLAS
-    // ======================================================================
-    {
-      vec2tree(x, fmm_data);
-      FMM_Tree_t* tree_curr = fmm_data.tree;
-      FMM_Tree_t* tvel;
-      switch(TEST_CASE) {
-        case 0:
-        case 1:
-        case 2:
-        case 3:
-          // convert velocity tree
-          {
-            FMM_Tree_t* tree_next = new FMM_Tree_t(comm);
-            tbslas::clone_tree<double, FMM_Mat_t::FMMNode_t, FMM_Tree_t>
-                (*tree_curr, *tree_next, 3);
-
-            // TODO: probably you do not need to trees for conversion of the values
-            FMM_Mat_t::FMMNode_t* n_curr = tree_curr->PostorderFirst();
-            FMM_Mat_t::FMMNode_t* n_next = tree_next->PostorderFirst();
-            int data_dof = n_curr->DataDOF();
-            int cheb_deg = n_curr->ChebDeg();
-            int sdim     = tree_curr->Dim();
-
-            // compute chebychev points positions on the fly
-            std::vector<double> cheb_pos = pvfmm::cheb_nodes<double>(cheb_deg, sdim);
-            int num_points               = cheb_pos.size()/sdim;
-
-            while (n_curr != NULL) {
-              if(!n_curr->IsGhost() && n_curr->IsLeaf()) break;
-              n_curr = tree_curr->PostorderNxt(n_curr);
-            }
-            while (n_next != NULL) {
-              if(!n_next->IsGhost() && n_next->IsLeaf()) break;
-              n_next = tree_next->PostorderNxt(n_next);
-            }
-
-            while (n_curr != NULL && n_next != NULL) {
-              if (n_curr->IsLeaf() && !n_curr->IsGhost()) {
-                double length      = static_cast<double>(std::pow(0.5, n_curr->Depth()));
-                double* node_coord = n_curr->Coord();
-
-                // TODO: figure out a way to optimize this part.
-                std::vector<double> points_pos(cheb_pos.size());
-                // scale the cheb points
-                for (int i = 0; i < num_points; i++) {
-                  points_pos[i*sdim+0] = node_coord[0] + length * cheb_pos[i*sdim+0];
-                  points_pos[i*sdim+1] = node_coord[1] + length * cheb_pos[i*sdim+1];
-                  points_pos[i*sdim+2] = node_coord[2] + length * cheb_pos[i*sdim+2];
-                }
-
-                // TODO: do no need to allocate these two vector in each iteration.
-                //     : move them to the outside the loop
-                std::vector<double> points_val(num_points*data_dof);
-                std::vector<double> points_val_layout(num_points*data_dof);
-
-                tbslas::NodeFieldFunctor<double, FMM_Tree_t>
-                    vel_functor(tree_curr);
-                vel_functor(points_pos.data(), num_points, points_val.data());
-                for (int i=0; i < num_points; i++) {
-                  points_val_layout[i+num_points*0] = points_val[i*data_dof+0] - 1;
-                  points_val_layout[i+num_points*1] = points_val[i*data_dof+1];
-                  points_val_layout[i+num_points*2] = points_val[i*data_dof+2];
-                }
-
-                pvfmm::cheb_approx<double, double>(points_val_layout.data(),
-                                                   cheb_deg,
-                                                   data_dof,
-                                                   &(n_next->ChebData()[0])
-                                                   );
-
-              }
-              n_curr = tree_curr->PostorderNxt(n_curr);
-              n_next = tree_next->PostorderNxt(n_next);
-            }
-            tvel = tree_next;
-          } break;
-        default:
-          tvel = tree_curr;
-      }
-
-      char out_name_buffer[300];
-      snprintf(out_name_buffer, sizeof(out_name_buffer),
-               "%s/stokes_vel_%d_", tbslas::get_result_dir().c_str(), 0);
-      tvel->Write2File(out_name_buffer, CHEB_DEG);
-      tvel->ConstructLET(pvfmm::FreeSpace);
-
-      // simulation parameters
-      double dx       = pow(0.5, MAXDEPTH);
-      int tstep       = 1;
-      double dt       = dx;
-      int num_rk_step = 1;
-      int tn          = 1;
-
-      tbslas::Profile<double>::Enable(true, &comm);
-
-      FMM_Tree_t* tconc_curr = new FMM_Tree_t(comm);
-      FMM_Tree_t* tconc_next = new FMM_Tree_t(comm);
-      tbslas::clone_tree<double, FMM_Mat_t::FMMNode_t, FMM_Tree_t>
-          (*tvel, *tconc_curr, 1);
-
-      tbslas::init_tree<double, FMM_Mat_t::FMMNode_t, FMM_Tree_t>
-          (*tconc_curr, tbslas::get_gaussian_field_yext<double,3>, 1);
-
-      snprintf(out_name_buffer, sizeof(out_name_buffer),
-               "%s/stokes_val_%d_", tbslas::get_result_dir().c_str(),  0);
-      tconc_curr->Write2File(out_name_buffer, CHEB_DEG);
-
-      tbslas::clone_tree<double, FMM_Mat_t::FMMNode_t, FMM_Tree_t>
-          (*tvel, *tconc_next, 1);
-
-      // TIME STEPPING
-      for (int tstep = 1; tstep < tn+1; tstep++) {
-        printf("============================================================\n");
-        printf("TIME STEP: %d DT: %f CURRENT TIME: %f\n", tstep, dt, dt*tstep);
-        tconc_curr->ConstructLET(pvfmm::FreeSpace);
-        tbslas::advect_tree_semilag<double, FMM_Mat_t::FMMNode_t, FMM_Tree_t>
-            (*tvel, *tconc_curr, *tconc_next, tstep, dt, num_rk_step);
-
-        snprintf(out_name_buffer, sizeof(out_name_buffer),
-                 "%s/stokes_val_%d_", tbslas::get_result_dir().c_str(), tstep);
-        tconc_next->Write2File(out_name_buffer, CHEB_DEG);
-
-        tbslas::swap_pointers(&tconc_curr, &tconc_next);
-      }
-      delete tconc_curr;
-      delete tconc_next;
-
-      tbslas::Profile<double>::print(&comm);
-    }
+    vec2tree(x, fmm_data);
 
     // Free work space.  All PETSc objects should be destroyed when they
     // are no longer needed.
@@ -1405,13 +1279,99 @@ int main(int argc,char **args){
     ierr = VecDestroy(&x);CHKERRQ(ierr);
     ierr = VecDestroy(&b);CHKERRQ(ierr);
     ierr = MatDestroy(&A);CHKERRQ(ierr);
-
-    // Delete fmm data
-    FMMDestroy(&fmm_data);
-
+    disp_result();
+    ierr = PetscFinalize();
   }
 
-  disp_result();
-  ierr = PetscFinalize();
+  // ======================================================================
+  // TBSLAS
+  // ======================================================================
+  {
+    tbslas::Profile<double>::Enable(true, &comm);
+
+    FMM_Tree_t* tree_curr = fmm_data.tree;
+
+    tbslas::Profile<double>::Tic("convert_vel",false,5);
+    switch(TEST_CASE) {
+      case 0:
+      case 1:
+      case 2:
+      case 3:
+        // convert velocity tree
+        {
+          FMM_Mat_t::FMMNode_t* n_curr = tree_curr->PostorderFirst();
+          while (n_curr != NULL) {
+            if(!n_curr->IsGhost() && n_curr->IsLeaf()) break;
+            n_curr = tree_curr->PostorderNxt(n_curr);
+          }
+          while (n_curr != NULL) {
+            if (n_curr->IsLeaf() && !n_curr->IsGhost()) {
+              n_curr->ChebData()[0] = n_curr->ChebData()[0] - 1;
+            }
+            n_curr = tree_curr->PostorderNxt(n_curr);
+          }
+        } break;
+      default:
+        printf("Undefined test case.\n");
+        return 1;
+    }
+    tbslas::Profile<double>::Toc();
+
+    char out_name_buffer[300];
+    snprintf(out_name_buffer, sizeof(out_name_buffer),
+             "%s/stokes_vel_%d_", tbslas::get_result_dir().c_str(), 0);
+    tree_curr->Write2File(out_name_buffer, VTK_ORDER);
+    tree_curr->ConstructLET(pvfmm::FreeSpace);
+
+    // simulation parameters
+    double dx_min = pow(0.5, MAXDEPTH);
+    double max_v  = tbslas::max_tree_value(*tree_curr);
+
+
+    double dt       = (TBSLAS_CFL * dx_min)/v_max;
+    int num_rk_step = 1;
+
+    FMM_Tree_t* tconc_curr = new FMM_Tree_t(comm);
+    FMM_Tree_t* tconc_next = new FMM_Tree_t(comm);
+    tbslas::clone_tree<double, FMM_Mat_t::FMMNode_t, FMM_Tree_t>
+        (*tree_curr, *tconc_curr, 1);
+
+    // tbslas::init_tree<double, FMM_Mat_t::FMMNode_t, FMM_Tree_t>
+    //     (*tconc_curr, tbslas::get_gaussian_field_yext<double,3>, 1);
+    tbslas::init_tree<double, FMM_Mat_t::FMMNode_t, FMM_Tree_t>
+        (*tconc_curr, tbslas::get_gaussian_field_3d<double,3>, 1);
+
+    snprintf(out_name_buffer, sizeof(out_name_buffer),
+             "%s/stokes_val_%d_", tbslas::get_result_dir().c_str(),  0);
+    tconc_curr->Write2File(out_name_buffer, VTK_ORDER);
+
+    tbslas::clone_tree<double, FMM_Mat_t::FMMNode_t, FMM_Tree_t>
+        (*tree_curr, *tconc_next, 1);
+
+    // TIME STEPPING
+    for (int tstep = 1; tstep < NTSTEP+1; tstep++) {
+      tconc_curr->ConstructLET(pvfmm::FreeSpace);
+      tbslas::advect_tree_semilag<double, FMM_Mat_t::FMMNode_t, FMM_Tree_t>
+          (*tree_curr, *tconc_curr, *tconc_next, tstep, dt, num_rk_step);
+
+      snprintf(out_name_buffer, sizeof(out_name_buffer),
+               "%s/stokes_val_%d_", tbslas::get_result_dir().c_str(), tstep);
+      tbslas::Profile<double>::Tic("Write2File",false,5);
+      tconc_next->Write2File(out_name_buffer, VTK_ORDER);
+      tbslas::Profile<double>::Toc();
+
+      tbslas::swap_pointers(&tconc_curr, &tconc_next);
+    }
+
+    tbslas::Profile<double>::print(&comm);
+
+    // clean up memory
+    delete tconc_curr;
+    delete tconc_next;
+  }
+
+  // Delete fmm data
+  FMMDestroy(&fmm_data);
+  MPI_Finalize();
   return 0;
 }
