@@ -31,6 +31,7 @@ static char help[] = "\n\
 // TBSLAS INCLUDES
 // Enable profiling
 #define __TBSLAS_PROFILE__ 5
+
 #include <utils/common.h>
 #include <tree/tree_utils.h>
 #include <tree/advect_tree_semilag.h>
@@ -80,7 +81,9 @@ PetscReal  JUMP_WIDTH       = 0.001;
 PetscReal  f_max            = 0;
 PetscReal  rho_             = 1000000;
 
-PetscInt   NTSTEP           = 1;
+PetscInt   NTSTEP = 1;
+double TBSLAS_CFL = 1;
+
 //PetscReal  L                = 500;
 std::vector<double>  pt_coord;
 
@@ -1324,11 +1327,18 @@ int main(int argc,char **args){
     tree_curr->ConstructLET(pvfmm::FreeSpace);
 
     // simulation parameters
-    double dx_min = pow(0.5, MAXDEPTH);
-    double max_v  = tbslas::max_tree_value(*tree_curr);
+    double max_value;
+    int max_depth;
+    tbslas::max_tree_values<double, FMM_Mat_t::FMMNode_t, FMM_Tree_t>
+        (*tree_curr, max_value, max_depth);
+    int myrank;
+    MPI_Comm_rank(comm, &myrank);
+    if (!myrank)
+      printf("%d: MAX VALUE: %f MAX DEPTH:%d\n", myrank,
+             max_value, max_depth);
 
-
-    double dt       = (TBSLAS_CFL * dx_min)/v_max;
+    double dx_min   = pow(0.5, max_depth);
+    double dt       = (TBSLAS_CFL * dx_min)/max_value;
     int num_rk_step = 1;
 
     FMM_Tree_t* tconc_curr = new FMM_Tree_t(comm);
