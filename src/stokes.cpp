@@ -1329,7 +1329,7 @@ int main(int argc,char **args){
     // simulation parameters
     double max_value;
     int max_depth;
-    tbslas::max_tree_values<double, FMM_Mat_t::FMMNode_t, FMM_Tree_t>
+    tbslas::max_tree_values<FMM_Tree_t>
         (*tree_curr, max_value, max_depth);
     int myrank;
     MPI_Comm_rank(comm, &myrank);
@@ -1343,19 +1343,19 @@ int main(int argc,char **args){
 
     FMM_Tree_t* tconc_curr = new FMM_Tree_t(comm);
     FMM_Tree_t* tconc_next = new FMM_Tree_t(comm);
-    tbslas::clone_tree<double, FMM_Mat_t::FMMNode_t, FMM_Tree_t>
+    tbslas::clone_tree<FMM_Tree_t>
         (*tree_curr, *tconc_curr, 1);
 
     // tbslas::init_tree<double, FMM_Mat_t::FMMNode_t, FMM_Tree_t>
     //     (*tconc_curr, tbslas::get_gaussian_field_yext<double,3>, 1);
-    tbslas::init_tree<double, FMM_Mat_t::FMMNode_t, FMM_Tree_t>
+    tbslas::init_tree<FMM_Tree_t>
         (*tconc_curr, tbslas::get_gaussian_field_3d<double,3>, 1);
 
     snprintf(out_name_buffer, sizeof(out_name_buffer),
              "%s/stokes_val_%d_", tbslas::get_result_dir().c_str(),  0);
     tconc_curr->Write2File(out_name_buffer, VTK_ORDER);
 
-    tbslas::clone_tree<double, FMM_Mat_t::FMMNode_t, FMM_Tree_t>
+    tbslas::clone_tree<FMM_Tree_t>
         (*tree_curr, *tconc_next, 1);
 
     // TIME STEPPING
