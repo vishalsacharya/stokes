@@ -82,7 +82,7 @@ PetscReal  f_max            = 0;
 PetscReal  rho_             = 1000000;
 
 PetscInt   NTSTEP = 1;
-double TBSLAS_CFL = 1;
+double TBSLAS_CFL = 0.1;
 
 //PetscReal  L                = 500;
 std::vector<double>  pt_coord;
@@ -90,6 +90,12 @@ std::vector<double>  pt_coord;
 void rho(const double* coord, int n, double* out){ //Input function
   int dof=1;
   size_t pt_cnt=pt_coord.size()/3;
+
+  // tansfer to the middle of the domain
+  std::vector<double> coord_local(n*COORD_DIM);
+  for (int i=0;i<n*3;i++) {
+    coord_local[i]=(coord[i]-0.5)*2+0.5;
+  }
 
   switch (TEST_CASE)
   {
@@ -130,7 +136,7 @@ void rho(const double* coord, int n, double* out){ //Input function
     case 3: // Porous media
       for(int i=0;i<n;i++){
         out[i*dof+0]=1;
-        const double* c=&coord[i*COORD_DIM];
+        const double* c=&coord_local[i*COORD_DIM];
         for(size_t j=0;j<pt_cnt;j++){
           double r_2=0;
           r_2+=(c[0]-pt_coord[j*COORD_DIM+0])*(c[0]-pt_coord[j*COORD_DIM+0]);
@@ -152,12 +158,20 @@ void rho(const double* coord, int n, double* out){ //Input function
         //  out[i*dof+0]*=1.0/(1.0+exp(-(4.0/JUMP_WIDTH)*r));
         //}
         out[i*dof+0]=rho_*out[i*dof+0];
+        for(int i=0;i<n;i++) {
+          if(fabs(coord_local[i*3+0]-0.5)>0.5) out[i*dof+0]=0;
+          if(fabs(coord_local[i*3+1]-0.5)>0.5) out[i*dof+0]=0;
+          if(fabs(coord_local[i*3+2]-0.5)>0.5) out[i*dof+0]=0;
+        }
       }
       break;
     default:
       break;
   }
-
+  // // tansfer back the domain
+  // for (int i=0;i<n*3;i++) {
+  //   coord[i] = (coord[i]-0.5)*0.5+0.5;
+  // }
 }
 
 void fn_input(const double* coord, int n, double* out){ //Input function
@@ -1360,6 +1374,12 @@ int main(int argc,char **args){
 
     // TIME STEPPING
     for (int tstep = 1; tstep < NTSTEP+1; tstep++) {
+      if(!myrank) {
+        printf("============================\n");
+        printf("dt: %f tstep: %d\n", dt, tstep);
+        printf("============================\n");
+      }
+
       tconc_curr->ConstructLET(pvfmm::FreeSpace);
       tbslas::advect_tree_semilag<double, FMM_Mat_t::FMMNode_t, FMM_Tree_t>
           (*tree_curr, *tconc_curr, *tconc_next, tstep, dt, num_rk_step);
