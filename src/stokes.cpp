@@ -33,8 +33,8 @@ static char help[] = "\n\
 #define __TBSLAS_PROFILE__ 5
 
 #include <utils/common.h>
-#include <tree/tree_utils.h>
-#include <tree/advect_tree_semilag.h>
+#include <tree/utils_tree.h>
+#include <tree/semilag_tree.h>
 #include <utils/profile.h>
 
 typedef pvfmm::FMM_Node<pvfmm::Cheb_Node<double> > FMMNode_t;
@@ -1343,7 +1343,7 @@ int main(int argc,char **args){
     // simulation parameters
     double max_value;
     int max_depth;
-    tbslas::max_tree_values<FMM_Tree_t>
+    tbslas::GetMaxTreeValues<FMM_Tree_t>
         (*tree_curr, max_value, max_depth);
     int myrank;
     MPI_Comm_rank(comm, &myrank);
@@ -1357,19 +1357,19 @@ int main(int argc,char **args){
 
     FMM_Tree_t* tconc_curr = new FMM_Tree_t(comm);
     FMM_Tree_t* tconc_next = new FMM_Tree_t(comm);
-    tbslas::clone_tree<FMM_Tree_t>
+    tbslas::CloneTree<FMM_Tree_t>
         (*tree_curr, *tconc_curr, 1);
 
     // tbslas::init_tree<double, FMM_Mat_t::FMMNode_t, FMM_Tree_t>
     //     (*tconc_curr, tbslas::get_gaussian_field_yext<double,3>, 1);
-    tbslas::init_tree<FMM_Tree_t>
+    tbslas::InitTree<FMM_Tree_t>
         (*tconc_curr, tbslas::get_gaussian_field_3d<double,3>, 1);
 
     snprintf(out_name_buffer, sizeof(out_name_buffer),
              "%s/stokes_val_%d_", tbslas::get_result_dir().c_str(),  0);
     tconc_curr->Write2File(out_name_buffer, VTK_ORDER);
 
-    tbslas::clone_tree<FMM_Tree_t>
+    tbslas::CloneTree<FMM_Tree_t>
         (*tree_curr, *tconc_next, 1);
 
     // TIME STEPPING
@@ -1381,7 +1381,7 @@ int main(int argc,char **args){
       }
 
       tconc_curr->ConstructLET(pvfmm::FreeSpace);
-      tbslas::advect_tree_semilag<double, FMM_Mat_t::FMMNode_t, FMM_Tree_t>
+      tbslas::SolveSemilagTree<FMM_Tree_t>
           (*tree_curr, *tconc_curr, *tconc_next, tstep, dt, num_rk_step);
 
       snprintf(out_name_buffer, sizeof(out_name_buffer),
