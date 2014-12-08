@@ -1305,9 +1305,14 @@ int main(int argc,char **args){
   // ======================================================================
   {
     tbslas::Profile<double>::Enable(true, &comm);
+    int np, myrank;
+    MPI_Comm_size(comm, &np);
+    MPI_Comm_rank(comm, &myrank);
 
-    FMM_Tree_t* tree_curr = fmm_data.tree;
-
+    //=====================================================================
+    // PREPARE THE VELOCITY FIELD
+    //=====================================================================
+    FMM_Tree_t* tvel_curr = fmm_data.tree;
     tbslas::Profile<double>::Tic("convert_vel",false,5);
     switch(TEST_CASE) {
       case 0:
@@ -1316,16 +1321,16 @@ int main(int argc,char **args){
       case 3:
         // convert velocity tree
         {
-          FMM_Mat_t::FMMNode_t* n_curr = tree_curr->PostorderFirst();
+          FMM_Mat_t::FMMNode_t* n_curr = tvel_curr->PostorderFirst();
           while (n_curr != NULL) {
             if(!n_curr->IsGhost() && n_curr->IsLeaf()) break;
-            n_curr = tree_curr->PostorderNxt(n_curr);
+            n_curr = tvel_curr->PostorderNxt(n_curr);
           }
           while (n_curr != NULL) {
             if (n_curr->IsLeaf() && !n_curr->IsGhost()) {
               n_curr->ChebData()[0] = n_curr->ChebData()[0] - 1;
             }
-            n_curr = tree_curr->PostorderNxt(n_curr);
+            n_curr = tvel_curr->PostorderNxt(n_curr);
           }
         } break;
       default:
@@ -1337,67 +1342,67 @@ int main(int argc,char **args){
     char out_name_buffer[300];
     snprintf(out_name_buffer, sizeof(out_name_buffer),
              "%s/stokes_vel_%d_", tbslas::get_result_dir().c_str(), 0);
-    tree_curr->Write2File(out_name_buffer, VTK_ORDER);
-    tree_curr->ConstructLET(pvfmm::FreeSpace);
+    tvel_curr->Write2File(out_name_buffer, VTK_ORDER);
+    tvel_curr->ConstructLET(pvfmm::FreeSpace);
 
-    // simulation parameters
-    double max_value;
-    int max_depth;
-    tbslas::GetMaxTreeValues<FMM_Tree_t>
-        (*tree_curr, max_value, max_depth);
-    int myrank;
-    MPI_Comm_rank(comm, &myrank);
-    if (!myrank)
-      printf("%d: MAX VALUE: %f MAX DEPTH:%d\n", myrank,
-             max_value, max_depth);
+    //=====================================================================
+    // PREPARE THE CONCENTRATION FIELD
+    //=====================================================================
+    int N      = np;
+    int M      = 1;
+    int q      = CHEB_DEG;
+    int d      = MAXDEPTH;
+    bool adap  = true;
+    double tol = TOL;
 
-    double dx_min   = pow(0.5, max_depth);
-    double dt       = (TBSLAS_CFL * dx_min)/max_value;
-    int num_rk_step = 1;
-
-    FMM_Tree_t* tconc_curr = new FMM_Tree_t(comm);
-    FMM_Tree_t* tconc_next = new FMM_Tree_t(comm);
-    tbslas::CloneTree<FMM_Tree_t>
-        (*tree_curr, *tconc_curr, 1);
-
-    // tbslas::init_tree<double, FMM_Mat_t::FMMNode_t, FMM_Tree_t>
-    //     (*tconc_curr, tbslas::get_gaussian_field_yext<double,3>, 1);
-    tbslas::InitTree<FMM_Tree_t>
-        (*tconc_curr, tbslas::get_gaussian_field_3d<double,3>, 1);
+    FMM_Tree_t tconc_curr(comm);
+    tbslas::ConstructTree<FMM_Tree_t>(N, M, q, d, adap, tol, comm,
+                                  tbslas::get_gaussian_field_3d<double,3>,
+                                  1,
+                                  tconc_curr);
 
     snprintf(out_name_buffer, sizeof(out_name_buffer),
-             "%s/stokes_val_%d_", tbslas::get_result_dir().c_str(),  0);
-    tconc_curr->Write2File(out_name_buffer, VTK_ORDER);
+             "%s/values_%d_", tbslas::get_result_dir().c_str(),  0);
+    tconc_curr.Write2File(out_name_buffer, VTK_ORDER);
 
-    tbslas::CloneTree<FMM_Tree_t>
-        (*tree_curr, *tconc_next, 1);
+    //=====================================================================
+    // SIMULATION PARAMETERS
+    //=====================================================================
+    double vel_max_value;
+    int vel_max_depth;
+    tbslas::GetMaxTreeValues<FMM_Tree_t>
+        (*tvel_curr, vel_max_value, vel_max_depth);
 
-    // TIME STEPPING
-    for (int tstep = 1; tstep < NTSTEP+1; tstep++) {
-      if(!myrank) {
-        printf("============================\n");
-        printf("dt: %f tstep: %d\n", dt, tstep);
-        printf("============================\n");
-      }
+    if (!myrank)
+      printf("%d: VEL MAX VALUE: %f VEL MAX DEPTH:%d\n",
+             myrank,
+             vel_max_value,
+             vel_max_depth);
 
-      tconc_curr->ConstructLET(pvfmm::FreeSpace);
-      tbslas::SolveSemilagTree<FMM_Tree_t>
-          (*tree_curr, *tconc_curr, *tconc_next, tstep, dt, num_rk_step);
+    double conc_max_value;
+    int conc_max_depth;
+    tbslas::GetMaxTreeValues<FMM_Tree_t>
+        (tconc_curr, conc_max_value, conc_max_depth);
 
-      snprintf(out_name_buffer, sizeof(out_name_buffer),
-               "%s/stokes_val_%d_", tbslas::get_result_dir().c_str(), tstep);
-      tbslas::Profile<double>::Tic("Write2File",false,5);
-      tconc_next->Write2File(out_name_buffer, VTK_ORDER);
-      tbslas::Profile<double>::Toc();
+    if (!myrank)
+      printf("%d:CON MAX VALUE: %f CON MAX DEPTH:%d\n",
+             myrank,
+             conc_max_value,
+             conc_max_depth);
 
-      tbslas::swap_pointers(&tconc_curr, &tconc_next);
-    }
+    struct tbslas::SimParam<double> sim_param;
+    double dx_min   = pow(0.5, conc_max_depth);
+    sim_param.total_num_timestep = NTSTEP;
+    sim_param.dt                 = (TBSLAS_CFL * dx_min)/vel_max_value;
+    sim_param.num_rk_step        = 1;
+
+    tbslas::RunSemilagSimulation(tvel_curr,
+                                 &tconc_curr,
+                                 &sim_param,
+                                 true,
+                                 true);
 
     tbslas::Profile<double>::print(&comm);
-
-    // clean up memory
-    delete tconc_curr;
-    delete tconc_next;
   }
 
   // Delete fmm data
