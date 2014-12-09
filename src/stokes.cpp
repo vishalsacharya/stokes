@@ -120,7 +120,7 @@ void rho(const double* coord, int n, double* out){ //Input function
     case 2: // Sphere
       for(int i=0;i<n;i++){
         out[i*dof+0]=1;
-        const double* c=&coord[i*COORD_DIM];
+        const double* c=&coord_local[i*COORD_DIM];
         for(size_t j=0;j<pt_cnt;j++){
           double r_2=0;
           r_2+=(c[0]-pt_coord[j*COORD_DIM+0])*(c[0]-pt_coord[j*COORD_DIM+0]);
@@ -131,6 +131,11 @@ void rho(const double* coord, int n, double* out){ //Input function
         }
         out[i*dof+0]=rho_*(1-out[i*dof+0]);
         //out[i*dof+0]=rho_*(1-out[i*dof+0])*out[i*dof+0]; // Surface
+        for(int i=0;i<n;i++) {
+          if(fabs(coord_local[i*3+0]-0.5)>0.5) out[i*dof+0]=0;
+          if(fabs(coord_local[i*3+1]-0.5)>0.5) out[i*dof+0]=0;
+          if(fabs(coord_local[i*3+2]-0.5)>0.5) out[i*dof+0]=0;
+        }
       }
       break;
     case 3: // Porous media
