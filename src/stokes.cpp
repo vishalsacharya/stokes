@@ -87,6 +87,14 @@ double TBSLAS_CFL = 0.1;
 //PetscReal  L                = 500;
 std::vector<double>  pt_coord;
 
+template<typename real_t, int sdim>
+void
+get_gaussian_field_3d_wrapper(const real_t* points_pos,
+                              const int num_points,
+                              real_t* out) {
+  tbslas::get_gaussian_field_3d<real_t,sdim>(points_pos, num_points, out);
+}
+
 void rho(const double* coord, int n, double* out){ //Input function
   int dof=1;
   size_t pt_cnt=pt_coord.size()/3;
@@ -1362,13 +1370,17 @@ int main(int argc,char **args){
 
     FMM_Tree_t tconc_curr(comm);
     tbslas::ConstructTree<FMM_Tree_t>(N, M, q, d, adap, tol, comm,
-                                  tbslas::get_gaussian_field_3d<double,3>,
-                                  1,
-                                  tconc_curr);
+                                      get_gaussian_field_3d_wrapper<double,3>,
+                                      1,
+                                      tconc_curr);
 
     snprintf(out_name_buffer, sizeof(out_name_buffer),
              "%s/values_%d_", tbslas::get_result_dir().c_str(),  0);
     tconc_curr.Write2File(out_name_buffer, VTK_ORDER);
+
+        // clone tree
+    FMM_Tree_t tconc_next(comm);
+    tbslas::CloneTree<FMM_Tree_t>(tconc_curr, tconc_next, 1);
 
     //=====================================================================
     // SIMULATION PARAMETERS
@@ -1401,9 +1413,12 @@ int main(int argc,char **args){
     sim_param.dt                 = (TBSLAS_CFL * dx_min)/vel_max_value;
     sim_param.num_rk_step        = 1;
 
+    FMM_Tree_t* result;
     tbslas::RunSemilagSimulation(tvel_curr,
                                  &tconc_curr,
+                                 &tconc_next,
                                  &sim_param,
+                                 &result,
                                  true,
                                  true);
 
