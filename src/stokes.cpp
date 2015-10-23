@@ -79,7 +79,11 @@ PetscReal  f_max            = 0;
 PetscReal  rho_             = 1000000;
 
 PetscInt   NTSTEP = 1;
-// double TBSLAS_CFL = 0.1;
+
+// TBSLAS GLOBAL
+void (*fn_con)(const double* , int , double*)=NULL;
+double tcurr = 0;
+
 
 //PetscReal  L                = 500;
 std::vector<double>  pt_coord;
@@ -1057,6 +1061,8 @@ int disp_result(){
 int main(int argc,char **args){
   MPI_Init(&argc,&args);
 
+  pvfmm::Profile::Enable(true);
+  
   PetscErrorCode ierr;
   PetscInitialize(&argc,&args,0,help);
 
@@ -1311,6 +1317,7 @@ int main(int argc,char **args){
     ierr = PetscFinalize();
   }
 
+
   // ======================================================================
   // TBSLAS
   // ======================================================================
@@ -1324,11 +1331,15 @@ int main(int argc,char **args){
     // =========================================================================
     parse_command_line_options(argc, args);
 
-    int   merge = strtoul(commandline_option(argc, args, "-merge",     "1", false,
-                                             "-merge <int> = (1)    : 1) no merge 2) complete merge 3) Semi-Merge"),NULL,10);
+    int test = strtoul(commandline_option(argc, args, "-test",     "1", false,
+                                          "-test <int> = (1)    : 1) Gaussian profile 2) Zalesak disk"),NULL,10);
 
+    int merge = strtoul(commandline_option(argc, args, "-merge",     "1", false,
+                                           "-merge <int> = (1)    : 1) no merge 2) complete merge 3) Semi-Merge"),NULL,10);
 
     tbslas::SimConfig* sim_config       = tbslas::SimConfigSingleton::Instance();
+    pvfmm::Profile::Enable(sim_config->profile);
+
     // sim_config->total_num_timestep      = NTSTEP;
     // sim_config->dt                      = dt;
     // sim_config->vtk_order               = VTK_ORDER;
@@ -1394,71 +1405,160 @@ int main(int argc,char **args){
     snprintf(out_name_buffer, sizeof(out_name_buffer),
              "%s/stokes_vel_%d_", tbslas::get_result_dir().c_str(), 0);
     tvel_curr->Write2File(out_name_buffer, VTK_ORDER);
-    tvel_curr->ConstructLET(pvfmm::FreeSpace);
 
-    //=====================================================================
-    // PREPARE THE CONCENTRATION FIELD
-    //=====================================================================
-    int N      = np;
-    int M      = 1;
-    int q      = CHEB_DEG;
-    int d      = MAXDEPTH;
-    bool adap  = true;
-    double tol = TOL;
+    // =========================================================================
+    // TEST CASE
+    // =========================================================================
+    switch(test) {
+      case 1:
+        fn_con = get_gaussian_field_cylinder_atT<double,3>;
+        break;
+      case 2:
+        fn_con = get_slotted_cylinder_atT<double,3>;
+        break;
+      case 3:
+        fn_con = get_gaussian_field_cylinder_atT<double,3>;
+        break;
+    }
 
-    // FMM_Tree_t tconc_curr(comm);
-    // tbslas::ConstructTree<FMM_Tree_t>(N, M, q, d, adap, tol, comm,
-    //                                   get_gaussian_field_3d_wrapper<double,3>,
-    //                                   1,
-    //                                   tconc_curr);
+    // =========================================================================
+    // SIMULATION PARAMETERS
+    // =========================================================================
+    sim_config->vtk_filename_prefix   = "advection";
+    sim_config->vtk_filename_variable = "conc";
+    sim_config->bc                    = fmm_data.bndry;
 
-    // snprintf(out_name_buffer, sizeof(out_name_buffer),
-    //          "%s/values_%d_", tbslas::get_result_dir().c_str(),  0);
-    // tconc_curr.Write2File(out_name_buffer, VTK_ORDER);
+    // =========================================================================
+    // INIT THE CONCENTRATION TREE
+    // =========================================================================
+    tcurr = 0;
+    FMM_Tree_t tconc_curr(comm);
+    tbslas::ConstructTree<FMM_Tree_t>(sim_config->tree_num_point_sources,
+                                      sim_config->tree_num_points_per_octanct,
+                                      sim_config->tree_chebyshev_order,
+                                      sim_config->tree_max_depth,
+                                      sim_config->tree_adap,
+                                      sim_config->tree_tolerance,
+                                      comm,
+                                      fn_con,
+                                      1,
+                                      tconc_curr);
+    // char out_name_buffer[300];
+    if (sim_config->vtk_save) {
+      snprintf(out_name_buffer,
+               sizeof(out_name_buffer),
+               sim_config->vtk_filename_format.c_str(),
+               tbslas::get_result_dir().c_str(),
+               sim_config->vtk_filename_prefix.c_str(),
+               sim_config->vtk_filename_variable.c_str(),
+               0);
+      tconc_curr.Write2File(out_name_buffer, sim_config->vtk_order);
+    }
 
-    //     // clone tree
-    // FMM_Tree_t tconc_next(comm);
-    // tbslas::CloneTree<FMM_Tree_t>(tconc_curr, tconc_next, 1);
+    // =========================================================================
+    // RUN
+    // =========================================================================
+    // set the input_fn to NULL -> needed for adaptive refinement
+    std::vector<FMMNode_t*>  ncurr_list = tconc_curr.GetNodeList();
+    for(int i = 0; i < ncurr_list.size(); i++) {
+      ncurr_list[i]->input_fn = (void (*)(const double* , int , double*))NULL;
+    }
 
-    // //=====================================================================
-    // // SIMULATION PARAMETERS
-    // //=====================================================================
-    // double vel_max_value;
-    // int vel_max_depth;
-    // tbslas::GetMaxTreeValues<FMM_Tree_t>
-    //     (*tvel_curr, vel_max_value, vel_max_depth);
+    switch(merge) {
+      case 2:
+        pvfmm::Profile::Tic("CMerge", &sim_config->comm, false, 5);
+        tbslas::MergeTree(*tvel_curr, tconc_curr);
+        pvfmm::Profile::Toc();
+        break;
+      case 3:
+        pvfmm::Profile::Tic("SMerge", &sim_config->comm, false, 5);
+        tbslas::SemiMergeTree(*tvel_curr, tconc_curr);
+        pvfmm::Profile::Toc();
+        break;
+    }
 
-    // if (!myrank)
-    //   printf("%d: VEL MAX VALUE: %f VEL MAX DEPTH:%d\n",
-    //          myrank,
-    //          vel_max_value,
-    //          vel_max_depth);
+    double in_al2,in_rl2,in_ali,in_rli;
+    CheckChebOutput<FMM_Tree_t>(&tconc_curr,
+                                fn_con,
+                                1,
+                                in_al2,in_rl2,in_ali,in_rli,
+                                std::string("Input"));
+    typedef tbslas::Reporter<double> Rep;
+    if(!myrank) {
+      Rep::AddData("TOL", sim_config->tree_tolerance);
+      Rep::AddData("ChbOrder", sim_config->tree_chebyshev_order);
+      Rep::AddData("MaxDEPTHC", sim_config->tree_max_depth);
+      // Rep::AddData("MaxDEPTHV", (max_depth_vel)?max_depth_vel:sim_config->tree_max_depth);
 
-    // double conc_max_value;
-    // int conc_max_depth;
-    // tbslas::GetMaxTreeValues<FMM_Tree_t>
-    //     (tconc_curr, conc_max_value, conc_max_depth);
+      Rep::AddData("DT", sim_config->dt);
+      Rep::AddData("TN", sim_config->total_num_timestep);
 
-    // if (!myrank)
-    //   printf("%d:CON MAX VALUE: %f CON MAX DEPTH:%d\n",
-    //          myrank,
-    //          conc_max_value,
-    //          conc_max_depth);
+      Rep::AddData("InAL2", in_al2);
+      Rep::AddData("InRL2", in_rl2);
+      Rep::AddData("InALINF", in_ali);
+      Rep::AddData("InRLINF", in_rli);
+    }
 
-    // struct tbslas::SimParam<double> sim_param;
-    // double dx_min   = pow(0.5, conc_max_depth);
-    // sim_param.total_num_timestep = NTSTEP;
-    // sim_param.dt                 = (TBSLAS_CFL * dx_min)/vel_max_value;
-    // sim_param.num_rk_step        = 1;
+    int num_leaves = tbslas::CountNumLeafNodes(tconc_curr);
 
-    // FMM_Tree_t* result;
-    // tbslas::RunSemilagSimulation(tvel_curr,
-    //                              &tconc_curr,
-    //                              &tconc_next,
-    //                              &sim_param,
-    //                              &result,
-    //                              true,
-    //                              true);
+    int timestep = 1;
+    for (; timestep < sim_config->total_num_timestep+1; timestep++) {
+      pvfmm::Profile::Tic("SL", &sim_config->comm, false, 5);
+      tbslas::SolveSemilagInSitu(*tvel_curr,
+                                 tconc_curr,
+                                 timestep,
+                                 sim_config->dt,
+                                 sim_config->num_rk_step);
+      pvfmm::Profile::Toc();
+
+      // refine the tree according to the computed values
+      pvfmm::Profile::Tic("RefineTree", &sim_config->comm, false, 5);
+      tconc_curr.RefineTree();
+      pvfmm::Profile::Toc();
+
+      //Write2File
+      if (sim_config->vtk_save) {
+        tconc_curr.Write2File(tbslas::GetVTKFileName(timestep, sim_config->vtk_filename_variable).c_str(), sim_config->vtk_order);
+      }
+
+      // (SEMI) MERGE TO FIX IMBALANCE
+      switch(merge) {
+        case 2:
+          pvfmm::Profile::Tic("CMerge", &sim_config->comm, false, 5);
+          tbslas::MergeTree(*tvel_curr, tconc_curr);
+          pvfmm::Profile::Toc();
+          break;
+        case 3:
+          pvfmm::Profile::Tic("SMerge", &sim_config->comm, false, 5);
+          tbslas::SemiMergeTree(*tvel_curr, tconc_curr);
+          pvfmm::Profile::Toc();
+          break;
+      }
+    }  // end for
+
+    // =========================================================================
+    // COMPUTE ERROR
+    // =========================================================================
+    tcurr = sim_config->total_num_timestep*sim_config->dt;
+    double al2,rl2,ali,rli;
+    CheckChebOutput<FMM_Tree_t>(&tconc_curr,
+                                fn_con,
+                                1,
+                                al2,rl2,ali,rli,
+                                std::string("Output"));
+
+    // =========================================================================
+    // REPORT RESULTS
+    // =========================================================================
+    if(!myrank) {
+      Rep::AddData("OutAL2", al2);
+      Rep::AddData("OutRL2", rl2);
+      Rep::AddData("OutALINF", ali);
+      Rep::AddData("OutRLINF", rli);
+      Rep::Report();
+    }
+    //Output Profiling results.
+    pvfmm::Profile::print(&comm);
   }
 
   // Delete fmm data
