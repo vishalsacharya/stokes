@@ -11,7 +11,7 @@ endif
 PSC_INC = -I$(PETSC_DIR)/include -I$(PETSC_DIR)/$(PETSC_ARCH)/include 
 PSC_LIB = -L$(PETSC_DIR)/lib -L$(PETSC_DIR)/$(PETSC_ARCH)/lib -lpetsc
 
-TBSLAS_INC = -I$(TBSLAS_DIR)/src
+TBSLAS_INC = -I$(TBSLAS_DIR)/src -I$(TBSLAS_DIR)/examples/include
 CXXFLAGS_TBSLAS = -std=c++0x 
 
 RM = rm -f

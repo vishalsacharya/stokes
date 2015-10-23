@@ -29,13 +29,10 @@ static char help[] = "\n\
 #include <cheb_node.hpp>
 
 // TBSLAS INCLUDES
-// Enable profiling
-#define __TBSLAS_PROFILE__ 5
-
 #include <utils/common.h>
 #include <tree/utils_tree.h>
 #include <tree/semilag_tree.h>
-#include <utils/profile.h>
+#include <utils.hpp>
 
 typedef pvfmm::FMM_Node<pvfmm::Cheb_Node<double> > FMMNode_t;
 typedef pvfmm::FMM_Cheb<FMMNode_t> FMM_Mat_t;
@@ -82,7 +79,7 @@ PetscReal  f_max            = 0;
 PetscReal  rho_             = 1000000;
 
 PetscInt   NTSTEP = 1;
-double TBSLAS_CFL = 0.1;
+// double TBSLAS_CFL = 0.1;
 
 //PetscReal  L                = 500;
 std::vector<double>  pt_coord;
@@ -433,9 +430,10 @@ int FMM_Init(MPI_Comm& comm, FMMData *fmm_data){
 
   //Kernel function
   const pvfmm::Kernel<double>* kernel;
-  if(INPUT_DOF==1) kernel=&pvfmm::LaplaceKernel<double>::potn_ker();
-  else if(INPUT_DOF==2) kernel=&pvfmm::ker_helmholtz;
-  else if(INPUT_DOF==3) kernel=&pvfmm::ker_stokes_vel;
+  // if(INPUT_DOF==1) kernel=&pvfmm::LaplaceKernel<double>::potn_ker();
+  //else if(INPUT_DOF==2) kernel=&pvfmm::ker_helmholtz;
+  if(INPUT_DOF==1) kernel=&pvfmm::LaplaceKernel<double>::potential();
+  else if(INPUT_DOF==3) kernel=&pvfmm::StokesKernel<double>::velocity();
 
   //Setup FMM data structure.
   int mult_order=MUL_ORDER;
@@ -1317,16 +1315,56 @@ int main(int argc,char **args){
   // TBSLAS
   // ======================================================================
   {
-    tbslas::Profile<double>::Enable(true, &comm);
     int np, myrank;
     MPI_Comm_size(comm, &np);
     MPI_Comm_rank(comm, &myrank);
+
+    // =========================================================================
+    // SIMULATION PARAMETERS
+    // =========================================================================
+    parse_command_line_options(argc, args);
+
+    int   merge = strtoul(commandline_option(argc, args, "-merge",     "1", false,
+                                             "-merge <int> = (1)    : 1) no merge 2) complete merge 3) Semi-Merge"),NULL,10);
+
+
+    tbslas::SimConfig* sim_config       = tbslas::SimConfigSingleton::Instance();
+    // sim_config->total_num_timestep      = NTSTEP;
+    // sim_config->dt                      = dt;
+    // sim_config->vtk_order               = VTK_ORDER;
+    // sim_config->vtk_save                = vtk_save;
+    // sim_config->use_cubic               = cubic;
+    // sim_config->cubic_upsampling_factor = cuf;
+    // sim_config->cubic_use_analytical    = false;
+    // sim_config->num_omp_threads         = omp;
+    // omp_set_num_threads(omp);
+    // // *************************************************************************
+    // // chebyshev tree
+    // // *************************************************************************
+    // sim_config->tree_num_point_sources      = N;
+    // sim_config->tree_num_points_per_octanct = M;
+    // sim_config->tree_chebyshev_order        = CHEB_DEG;
+    // sim_config->tree_max_depth              = MAXDEPTH;
+    // sim_config->tree_tolerance              = TOL;
+    // sim_config->tree_adap                   = adap;
+    // // *************************************************************************
+    // // MISC
+    // // *************************************************************************
+    // sim_config->profile = profile;
+    // pvfmm::Profile::Enable(sim_config->profile);
+
+    // =========================================================================
+    // PRINT METADATA
+    // =========================================================================
+    if (!myrank) {
+      MetaData_t::Print();
+    }
 
     //=====================================================================
     // PREPARE THE VELOCITY FIELD
     //=====================================================================
     FMM_Tree_t* tvel_curr = fmm_data.tree;
-    tbslas::Profile<double>::Tic("convert_vel",false,5);
+    // tbslas::Profile<double>::Tic("convert_vel",false,5);
     switch(TEST_CASE) {
       case 0:
       case 1:
@@ -1350,7 +1388,7 @@ int main(int argc,char **args){
         printf("Undefined test case.\n");
         return 1;
     }
-    tbslas::Profile<double>::Toc();
+    //pvfmm::Profile<double>::Toc();
 
     char out_name_buffer[300];
     snprintf(out_name_buffer, sizeof(out_name_buffer),
@@ -1368,61 +1406,59 @@ int main(int argc,char **args){
     bool adap  = true;
     double tol = TOL;
 
-    FMM_Tree_t tconc_curr(comm);
-    tbslas::ConstructTree<FMM_Tree_t>(N, M, q, d, adap, tol, comm,
-                                      get_gaussian_field_3d_wrapper<double,3>,
-                                      1,
-                                      tconc_curr);
+    // FMM_Tree_t tconc_curr(comm);
+    // tbslas::ConstructTree<FMM_Tree_t>(N, M, q, d, adap, tol, comm,
+    //                                   get_gaussian_field_3d_wrapper<double,3>,
+    //                                   1,
+    //                                   tconc_curr);
 
-    snprintf(out_name_buffer, sizeof(out_name_buffer),
-             "%s/values_%d_", tbslas::get_result_dir().c_str(),  0);
-    tconc_curr.Write2File(out_name_buffer, VTK_ORDER);
+    // snprintf(out_name_buffer, sizeof(out_name_buffer),
+    //          "%s/values_%d_", tbslas::get_result_dir().c_str(),  0);
+    // tconc_curr.Write2File(out_name_buffer, VTK_ORDER);
 
-        // clone tree
-    FMM_Tree_t tconc_next(comm);
-    tbslas::CloneTree<FMM_Tree_t>(tconc_curr, tconc_next, 1);
+    //     // clone tree
+    // FMM_Tree_t tconc_next(comm);
+    // tbslas::CloneTree<FMM_Tree_t>(tconc_curr, tconc_next, 1);
 
-    //=====================================================================
-    // SIMULATION PARAMETERS
-    //=====================================================================
-    double vel_max_value;
-    int vel_max_depth;
-    tbslas::GetMaxTreeValues<FMM_Tree_t>
-        (*tvel_curr, vel_max_value, vel_max_depth);
+    // //=====================================================================
+    // // SIMULATION PARAMETERS
+    // //=====================================================================
+    // double vel_max_value;
+    // int vel_max_depth;
+    // tbslas::GetMaxTreeValues<FMM_Tree_t>
+    //     (*tvel_curr, vel_max_value, vel_max_depth);
 
-    if (!myrank)
-      printf("%d: VEL MAX VALUE: %f VEL MAX DEPTH:%d\n",
-             myrank,
-             vel_max_value,
-             vel_max_depth);
+    // if (!myrank)
+    //   printf("%d: VEL MAX VALUE: %f VEL MAX DEPTH:%d\n",
+    //          myrank,
+    //          vel_max_value,
+    //          vel_max_depth);
 
-    double conc_max_value;
-    int conc_max_depth;
-    tbslas::GetMaxTreeValues<FMM_Tree_t>
-        (tconc_curr, conc_max_value, conc_max_depth);
+    // double conc_max_value;
+    // int conc_max_depth;
+    // tbslas::GetMaxTreeValues<FMM_Tree_t>
+    //     (tconc_curr, conc_max_value, conc_max_depth);
 
-    if (!myrank)
-      printf("%d:CON MAX VALUE: %f CON MAX DEPTH:%d\n",
-             myrank,
-             conc_max_value,
-             conc_max_depth);
+    // if (!myrank)
+    //   printf("%d:CON MAX VALUE: %f CON MAX DEPTH:%d\n",
+    //          myrank,
+    //          conc_max_value,
+    //          conc_max_depth);
 
-    struct tbslas::SimParam<double> sim_param;
-    double dx_min   = pow(0.5, conc_max_depth);
-    sim_param.total_num_timestep = NTSTEP;
-    sim_param.dt                 = (TBSLAS_CFL * dx_min)/vel_max_value;
-    sim_param.num_rk_step        = 1;
+    // struct tbslas::SimParam<double> sim_param;
+    // double dx_min   = pow(0.5, conc_max_depth);
+    // sim_param.total_num_timestep = NTSTEP;
+    // sim_param.dt                 = (TBSLAS_CFL * dx_min)/vel_max_value;
+    // sim_param.num_rk_step        = 1;
 
-    FMM_Tree_t* result;
-    tbslas::RunSemilagSimulation(tvel_curr,
-                                 &tconc_curr,
-                                 &tconc_next,
-                                 &sim_param,
-                                 &result,
-                                 true,
-                                 true);
-
-    tbslas::Profile<double>::print(&comm);
+    // FMM_Tree_t* result;
+    // tbslas::RunSemilagSimulation(tvel_curr,
+    //                              &tconc_curr,
+    //                              &tconc_next,
+    //                              &sim_param,
+    //                              &result,
+    //                              true,
+    //                              true);
   }
 
   // Delete fmm data
