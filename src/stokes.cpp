@@ -101,10 +101,10 @@ void rho(const double* coord, int n, double* out){ //Input function
   size_t pt_cnt=pt_coord.size()/3;
 
   // tansfer to the middle of the domain
-  std::vector<double> coord_local(n*COORD_DIM);
-  for (int i=0;i<n*3;i++) {
-    coord_local[i]=(coord[i]-0.5)*2+0.5;
-  }
+  // std::vector<double> coord_local(n*COORD_DIM);
+  // for (int i=0;i<n*3;i++) {
+  //   coord_local[i]=(coord[i]-0.5)*2+0.5;
+  // }
 
   switch (TEST_CASE)
   {
@@ -129,7 +129,8 @@ void rho(const double* coord, int n, double* out){ //Input function
     case 2: // Sphere
       for(int i=0;i<n;i++){
         out[i*dof+0]=1;
-        const double* c=&coord_local[i*COORD_DIM];
+        // const double* c=&coord_local[i*COORD_DIM];
+        const double* c=&coord[i*COORD_DIM];
         for(size_t j=0;j<pt_cnt;j++){
           double r_2=0;
           r_2+=(c[0]-pt_coord[j*COORD_DIM+0])*(c[0]-pt_coord[j*COORD_DIM+0]);
@@ -141,16 +142,16 @@ void rho(const double* coord, int n, double* out){ //Input function
         out[i*dof+0]=rho_*(1-out[i*dof+0]);
         //out[i*dof+0]=rho_*(1-out[i*dof+0])*out[i*dof+0]; // Surface
         for(int i=0;i<n;i++) {
-          if(fabs(coord_local[i*3+0]-0.5)>0.5) out[i*dof+0]=0;
-          if(fabs(coord_local[i*3+1]-0.5)>0.5) out[i*dof+0]=0;
-          if(fabs(coord_local[i*3+2]-0.5)>0.5) out[i*dof+0]=0;
+          if(fabs(coord[i*3+0]-0.5)>0.5) out[i*dof+0]=0;
+          if(fabs(coord[i*3+1]-0.5)>0.5) out[i*dof+0]=0;
+          if(fabs(coord[i*3+2]-0.5)>0.5) out[i*dof+0]=0;
         }
       }
       break;
     case 3: // Porous media
       for(int i=0;i<n;i++){
         out[i*dof+0]=1;
-        const double* c=&coord_local[i*COORD_DIM];
+        const double* c=&coord[i*COORD_DIM];
         for(size_t j=0;j<pt_cnt;j++){
           double r_2=0;
           r_2+=(c[0]-pt_coord[j*COORD_DIM+0])*(c[0]-pt_coord[j*COORD_DIM+0]);
@@ -173,9 +174,9 @@ void rho(const double* coord, int n, double* out){ //Input function
         //}
         out[i*dof+0]=rho_*out[i*dof+0];
         for(int i=0;i<n;i++) {
-          if(fabs(coord_local[i*3+0]-0.5)>0.5) out[i*dof+0]=0;
-          if(fabs(coord_local[i*3+1]-0.5)>0.5) out[i*dof+0]=0;
-          if(fabs(coord_local[i*3+2]-0.5)>0.5) out[i*dof+0]=0;
+          if(fabs(coord[i*3+0]-0.5)>0.5) out[i*dof+0]=0;
+          if(fabs(coord[i*3+1]-0.5)>0.5) out[i*dof+0]=0;
+          if(fabs(coord[i*3+2]-0.5)>0.5) out[i*dof+0]=0;
         }
       }
       break;
@@ -1058,11 +1059,8 @@ int disp_result(){
   return 0;
 }
 
-int main(int argc,char **args){
-  MPI_Init(&argc,&args);
+int SolveStockes(int argc, char **args, FMMData& fmm_data) {
 
-  pvfmm::Profile::Enable(true);
-  
   PetscErrorCode ierr;
   PetscInitialize(&argc,&args,0,help);
 
@@ -1205,7 +1203,6 @@ int main(int argc,char **args){
   }
 
   // Initialize FMM
-  FMMData fmm_data;
   FMM_Init(comm, &fmm_data);
 
   {
@@ -1316,61 +1313,45 @@ int main(int argc,char **args){
     disp_result();
     ierr = PetscFinalize();
   }
+  return 0;
+}
 
+int main(int argc,char **args){
+  MPI_Init(&argc,&args);
+
+  MPI_Comm comm=MPI_COMM_WORLD;
+  int np, myrank;
+  MPI_Comm_size(comm, &np);
+  MPI_Comm_rank(comm, &myrank);
+
+  // =========================================================================
+  // SIMULATION PARAMETERS
+  // =========================================================================
+  parse_command_line_options(argc, args);
+
+  int test = strtoul(commandline_option(argc, args, "-test",     "1", false,
+                                        "-test <int> = (1)    : 1) Gaussian profile 2) Zalesak disk"),NULL,10);
+
+  int merge = strtoul(commandline_option(argc, args, "-merge",     "1", false,
+                                         "-merge <int> = (1)    : 1) no merge 2) complete merge 3) Semi-Merge"),NULL,10);
+
+  tbslas::SimConfig* sim_config = tbslas::SimConfigSingleton::Instance();
+  pvfmm::Profile::Enable(sim_config->profile);
+
+  // =========================================================================
+  // PRINT METADATA
+  // =========================================================================
+  if (!myrank) {
+    MetaData_t::Print();
+  }
+
+  FMMData fmm_data;
+  SolveStockes(argc, args, fmm_data);
 
   // ======================================================================
   // TBSLAS
   // ======================================================================
   {
-    int np, myrank;
-    MPI_Comm_size(comm, &np);
-    MPI_Comm_rank(comm, &myrank);
-
-    // =========================================================================
-    // SIMULATION PARAMETERS
-    // =========================================================================
-    parse_command_line_options(argc, args);
-
-    int test = strtoul(commandline_option(argc, args, "-test",     "1", false,
-                                          "-test <int> = (1)    : 1) Gaussian profile 2) Zalesak disk"),NULL,10);
-
-    int merge = strtoul(commandline_option(argc, args, "-merge",     "1", false,
-                                           "-merge <int> = (1)    : 1) no merge 2) complete merge 3) Semi-Merge"),NULL,10);
-
-    tbslas::SimConfig* sim_config       = tbslas::SimConfigSingleton::Instance();
-    pvfmm::Profile::Enable(sim_config->profile);
-
-    // sim_config->total_num_timestep      = NTSTEP;
-    // sim_config->dt                      = dt;
-    // sim_config->vtk_order               = VTK_ORDER;
-    // sim_config->vtk_save                = vtk_save;
-    // sim_config->use_cubic               = cubic;
-    // sim_config->cubic_upsampling_factor = cuf;
-    // sim_config->cubic_use_analytical    = false;
-    // sim_config->num_omp_threads         = omp;
-    // omp_set_num_threads(omp);
-    // // *************************************************************************
-    // // chebyshev tree
-    // // *************************************************************************
-    // sim_config->tree_num_point_sources      = N;
-    // sim_config->tree_num_points_per_octanct = M;
-    // sim_config->tree_chebyshev_order        = CHEB_DEG;
-    // sim_config->tree_max_depth              = MAXDEPTH;
-    // sim_config->tree_tolerance              = TOL;
-    // sim_config->tree_adap                   = adap;
-    // // *************************************************************************
-    // // MISC
-    // // *************************************************************************
-    // sim_config->profile = profile;
-    // pvfmm::Profile::Enable(sim_config->profile);
-
-    // =========================================================================
-    // PRINT METADATA
-    // =========================================================================
-    if (!myrank) {
-      MetaData_t::Print();
-    }
-
     //=====================================================================
     // PREPARE THE VELOCITY FIELD
     //=====================================================================
@@ -1411,12 +1392,14 @@ int main(int argc,char **args){
     // =========================================================================
     switch(test) {
       case 1:
+        fn_con = get_gaussian_field_3d_wrapper<double,3>;
+      case 2:
         fn_con = get_gaussian_field_cylinder_atT<double,3>;
         break;
-      case 2:
+      case 3:
         fn_con = get_slotted_cylinder_atT<double,3>;
         break;
-      case 3:
+      case 4:
         fn_con = get_gaussian_field_cylinder_atT<double,3>;
         break;
     }
