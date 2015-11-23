@@ -1442,6 +1442,7 @@ int main(int argc,char **args){
     switch(test) {
       case 1:
         fn_con = get_gaussian_field_3d_wrapper<double,3>;
+        break;
       case 2:
         fn_con = get_gaussian_field_cylinder_atT<double,3>;
         break;
