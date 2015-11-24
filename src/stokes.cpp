@@ -1108,7 +1108,7 @@ int disp_result(){
   return 0;
 }
 
-int SolveStockes(int argc, char **args, FMMData& fmm_data) {
+int SolveStokes(int argc, char **args, FMMData& fmm_data) {
 
   PetscErrorCode ierr;
   PetscInitialize(&argc,&args,0,help);
@@ -1395,7 +1395,7 @@ int main(int argc,char **args){
   }
 
   FMMData fmm_data;
-  SolveStockes(argc, args, fmm_data);
+  SolveStokes(argc, args, fmm_data);
 
   // ======================================================================
   // TBSLAS
@@ -1516,6 +1516,7 @@ int main(int argc,char **args){
                                 1,
                                 in_al2,in_rl2,in_ali,in_rli,
                                 std::string("Input"));
+
     typedef tbslas::Reporter<double> Rep;
     if(!myrank) {
       Rep::AddData("TOL", sim_config->tree_tolerance);
@@ -1536,6 +1537,21 @@ int main(int argc,char **args){
 
     int timestep = 1;
     for (; timestep < sim_config->total_num_timestep+1; timestep++) {
+
+      // (SEMI) MERGE TO FIX IMBALANCE
+      switch(merge) {
+        case 2:
+          pvfmm::Profile::Tic("CMerge", &sim_config->comm, false, 5);
+          tbslas::MergeTree(*tvel_curr, tconc_curr);
+          pvfmm::Profile::Toc();
+          break;
+        case 3:
+          pvfmm::Profile::Tic("SMerge", &sim_config->comm, false, 5);
+          tbslas::SemiMergeTree(*tvel_curr, tconc_curr);
+          pvfmm::Profile::Toc();
+          break;
+      }
+
       pvfmm::Profile::Tic("SL", &sim_config->comm, false, 5);
       tbslas::SolveSemilagInSitu(*tvel_curr,
                                  tconc_curr,
@@ -1554,19 +1570,6 @@ int main(int argc,char **args){
         tconc_curr.Write2File(tbslas::GetVTKFileName(timestep, sim_config->vtk_filename_variable).c_str(), sim_config->vtk_order);
       }
 
-      // (SEMI) MERGE TO FIX IMBALANCE
-      switch(merge) {
-        case 2:
-          pvfmm::Profile::Tic("CMerge", &sim_config->comm, false, 5);
-          tbslas::MergeTree(*tvel_curr, tconc_curr);
-          pvfmm::Profile::Toc();
-          break;
-        case 3:
-          pvfmm::Profile::Tic("SMerge", &sim_config->comm, false, 5);
-          tbslas::SemiMergeTree(*tvel_curr, tconc_curr);
-          pvfmm::Profile::Toc();
-          break;
-      }
     }  // end for
 
     // =========================================================================
