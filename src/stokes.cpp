@@ -217,7 +217,7 @@ get_gaussian_field_3d_wrapper_03(const real_t* points_pos,
   real_t sigma_y = 0.06;
   real_t sigma_z = 0.06;
 
-  get_gaussian_position <real_t>(0.7, 1, 0.4, 0.7, 0.7, 0.9, xc, yc, zc);
+  get_gaussian_position <real_t>(0.7, 1, 0.6, 0.9, 0.7, 0.9, xc, yc, zc);
 
   tbslas::get_gaussian_field_3d<real_t,sdim>(points_pos, num_points, out,
                                              xc, yc, zc,
