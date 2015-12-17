@@ -137,12 +137,47 @@ get_slotted_cylinder_atT(const real_t* points_pos,
                                              a);
 }
 
+template<typename real_t>
+void get_gaussian_position (real_t xi,  real_t xf,
+                            real_t yi,  real_t yf,
+                            real_t zi,  real_t zf,
+                            real_t &xc, real_t &yc, real_t &zc)
+{
+
+  for(size_t i=0;i<PT_CNT;i++){
+    if (pt_coord[3*i  ] > xi && pt_coord[3*i  ] < xf  &&
+        pt_coord[3*i+1] > yi && pt_coord[3*i+1] < yf  &&
+        pt_coord[3*i+2] > zi && pt_coord[3*i+2] < zf){
+
+      xc = pt_coord[3*i  ];
+      yc = pt_coord[3*i+1];
+      zc = pt_coord[3*i+2];
+      break;
+
+    }
+  }
+}
+
 template<typename real_t, int sdim>
 void
 get_gaussian_field_3d_wrapper(const real_t* points_pos,
                               const int num_points,
                               real_t* out) {
-  tbslas::get_gaussian_field_3d<real_t,sdim>(points_pos, num_points, out);
+
+  real_t xc;
+  real_t yc;
+  real_t zc;
+  real_t A       = 1.0 ;
+  real_t sigma_x = 0.06;
+  real_t sigma_y = 0.06;
+  real_t sigma_z = 0.06;
+
+  get_gaussian_position <real_t>(0.8, 1, 0.4, 0.7, 0.3, 0.7, xc, yc, zc);
+
+  tbslas::get_gaussian_field_3d<real_t,sdim>(points_pos, num_points, out,
+                                              xc, yc, zc,
+                                              A,
+                                              sigma_x, sigma_y, sigma_z);
 }
 
 void rho(const double* coord, int n, double* out){ //Input function
