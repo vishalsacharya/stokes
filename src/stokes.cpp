@@ -160,9 +160,9 @@ void get_gaussian_position (real_t xi,  real_t xf,
 
 template<typename real_t, int sdim>
 void
-get_gaussian_field_3d_wrapper(const real_t* points_pos,
-                              const int num_points,
-                              real_t* out) {
+get_gaussian_field_3d_wrapper_01(const real_t* points_pos,
+                                 const int num_points,
+                                 real_t* out) {
 
   real_t xc;
   real_t yc;
@@ -172,12 +172,57 @@ get_gaussian_field_3d_wrapper(const real_t* points_pos,
   real_t sigma_y = 0.06;
   real_t sigma_z = 0.06;
 
-  get_gaussian_position <real_t>(0.8, 1, 0.4, 0.7, 0.3, 0.7, xc, yc, zc);
+  get_gaussian_position <real_t>(0.7, 1, 0.2, 0.5, 0.4, 0.7, xc, yc, zc);
 
   tbslas::get_gaussian_field_3d<real_t,sdim>(points_pos, num_points, out,
                                               xc, yc, zc,
                                               A,
                                               sigma_x, sigma_y, sigma_z);
+}
+
+
+template<typename real_t, int sdim>
+void
+get_gaussian_field_3d_wrapper_02(const real_t* points_pos,
+                                 const int num_points,
+                                 real_t* out) {
+
+  real_t xc;
+  real_t yc;
+  real_t zc;
+  real_t A       = 1.0 ;
+  real_t sigma_x = 0.06;
+  real_t sigma_y = 0.06;
+  real_t sigma_z = 0.06;
+
+  get_gaussian_position <real_t>(0.7, 1, 0.7, 0.9, 0.4, 0.7, xc, yc, zc);
+
+  tbslas::get_gaussian_field_3d<real_t,sdim>(points_pos, num_points, out,
+                                              xc, yc, zc,
+                                              A,
+                                              sigma_x, sigma_y, sigma_z);
+}
+
+template<typename real_t, int sdim>
+void
+get_gaussian_field_3d_wrapper_03(const real_t* points_pos,
+                                 const int num_points,
+                                 real_t* out) {
+
+  real_t xc;
+  real_t yc;
+  real_t zc;
+  real_t A       = 1.0 ;
+  real_t sigma_x = 0.06;
+  real_t sigma_y = 0.06;
+  real_t sigma_z = 0.06;
+
+  get_gaussian_position <real_t>(0.7, 1, 0.4, 0.7, 0.7, 0.9, xc, yc, zc);
+
+  tbslas::get_gaussian_field_3d<real_t,sdim>(points_pos, num_points, out,
+                                             xc, yc, zc,
+                                             A,
+                                             sigma_x, sigma_y, sigma_z);
 }
 
 void rho(const double* coord, int n, double* out){ //Input function
@@ -1432,51 +1477,51 @@ int main(int argc,char **args){
   FMMData fmm_data;
   SolveStokes(argc, args, fmm_data);
 
+  //=====================================================================
+  // PREPARE THE VELOCITY FIELD
+  //=====================================================================
+  FMM_Tree_t* tvel_curr = fmm_data.tree;
+  // tbslas::Profile<double>::Tic("convert_vel",false,5);
+  switch(TEST_CASE) {
+    case 0:
+    case 1:
+    case 2:
+    case 3:
+      // convert velocity tree
+      {
+        FMM_Mat_t::FMMNode_t* n_curr = tvel_curr->PostorderFirst();
+        while (n_curr != NULL) {
+          if(!n_curr->IsGhost() && n_curr->IsLeaf()) break;
+          n_curr = tvel_curr->PostorderNxt(n_curr);
+        }
+        while (n_curr != NULL) {
+          if (n_curr->IsLeaf() && !n_curr->IsGhost()) {
+            n_curr->ChebData()[0] = n_curr->ChebData()[0] - 1;
+          }
+          n_curr = tvel_curr->PostorderNxt(n_curr);
+        }
+      } break;
+    default:
+      printf("Undefined test case.\n");
+      return 1;
+  }
+  //pvfmm::Profile<double>::Toc();
+
+  char out_name_buffer[300];
+  snprintf(out_name_buffer, sizeof(out_name_buffer),
+           "%s/stokes_vel_%d_", tbslas::get_result_dir().c_str(), 0);
+  tvel_curr->Write2File(out_name_buffer, VTK_ORDER);
+
   // ======================================================================
   // TBSLAS
   // ======================================================================
-  {
-    //=====================================================================
-    // PREPARE THE VELOCITY FIELD
-    //=====================================================================
-    FMM_Tree_t* tvel_curr = fmm_data.tree;
-    // tbslas::Profile<double>::Tic("convert_vel",false,5);
-    switch(TEST_CASE) {
-      case 0:
-      case 1:
-      case 2:
-      case 3:
-        // convert velocity tree
-        {
-          FMM_Mat_t::FMMNode_t* n_curr = tvel_curr->PostorderFirst();
-          while (n_curr != NULL) {
-            if(!n_curr->IsGhost() && n_curr->IsLeaf()) break;
-            n_curr = tvel_curr->PostorderNxt(n_curr);
-          }
-          while (n_curr != NULL) {
-            if (n_curr->IsLeaf() && !n_curr->IsGhost()) {
-              n_curr->ChebData()[0] = n_curr->ChebData()[0] - 1;
-            }
-            n_curr = tvel_curr->PostorderNxt(n_curr);
-          }
-        } break;
-      default:
-        printf("Undefined test case.\n");
-        return 1;
-    }
-    //pvfmm::Profile<double>::Toc();
-
-    char out_name_buffer[300];
-    snprintf(out_name_buffer, sizeof(out_name_buffer),
-             "%s/stokes_vel_%d_", tbslas::get_result_dir().c_str(), 0);
-    tvel_curr->Write2File(out_name_buffer, VTK_ORDER);
-
+   {
     // =========================================================================
     // TEST CASE
     // =========================================================================
     switch(test) {
       case 1:
-        fn_con = get_gaussian_field_3d_wrapper<double,3>;
+        fn_con = get_gaussian_field_3d_wrapper_01<double,3>;
         break;
       case 2:
         fn_con = get_gaussian_field_cylinder_atT<double,3>;
@@ -1493,7 +1538,7 @@ int main(int argc,char **args){
     // SIMULATION PARAMETERS
     // =========================================================================
     sim_config->vtk_filename_prefix   = "advection";
-    sim_config->vtk_filename_variable = "conc";
+    sim_config->vtk_filename_variable = "conc01";
     sim_config->bc                    = fmm_data.bndry;
 
     // =========================================================================
@@ -1545,30 +1590,109 @@ int main(int argc,char **args){
         break;
     }
 
-    double in_al2,in_rl2,in_ali,in_rli;
-    CheckChebOutput<FMM_Tree_t>(&tconc_curr,
-                                fn_con,
-                                1,
-                                in_al2,in_rl2,in_ali,in_rli,
-                                std::string("Input"));
+    int timestep = 1;
+    for (; timestep < sim_config->total_num_timestep+1; timestep++) {
 
-    typedef tbslas::Reporter<double> Rep;
-    if(!myrank) {
-      Rep::AddData("TOL", sim_config->tree_tolerance);
-      Rep::AddData("ChbOrder", sim_config->tree_chebyshev_order);
-      Rep::AddData("MaxDEPTHC", sim_config->tree_max_depth);
-      // Rep::AddData("MaxDEPTHV", (max_depth_vel)?max_depth_vel:sim_config->tree_max_depth);
+      // (SEMI) MERGE TO FIX IMBALANCE
+      switch(merge) {
+        case 2:
+          pvfmm::Profile::Tic("CMerge", &sim_config->comm, false, 5);
+          tbslas::MergeTree(*tvel_curr, tconc_curr);
+          pvfmm::Profile::Toc();
+          break;
+        case 3:
+          pvfmm::Profile::Tic("SMerge", &sim_config->comm, false, 5);
+          tbslas::SemiMergeTree(*tvel_curr, tconc_curr);
+          pvfmm::Profile::Toc();
+          break;
+      }
 
-      Rep::AddData("DT", sim_config->dt);
-      Rep::AddData("TN", sim_config->total_num_timestep);
+      pvfmm::Profile::Tic("SL", &sim_config->comm, false, 5);
+      tbslas::SolveSemilagInSitu(*tvel_curr,
+                                 tconc_curr,
+                                 timestep,
+                                 sim_config->dt,
+                                 sim_config->num_rk_step);
+      pvfmm::Profile::Toc();
 
-      Rep::AddData("InAL2", in_al2);
-      Rep::AddData("InRL2", in_rl2);
-      Rep::AddData("InALINF", in_ali);
-      Rep::AddData("InRLINF", in_rli);
+      // refine the tree according to the computed values
+      pvfmm::Profile::Tic("RefineTree", &sim_config->comm, false, 5);
+      tconc_curr.RefineTree();
+      pvfmm::Profile::Toc();
+
+      //Write2File
+      if (sim_config->vtk_save) {
+        tconc_curr.Write2File(tbslas::GetVTKFileName(timestep, sim_config->vtk_filename_variable).c_str(), sim_config->vtk_order);
+      }
+
+    }  // end for
+
+    //Output Profiling results.
+    pvfmm::Profile::print(&comm);
+  }
+
+
+   if (test == 1) {
+    // =========================================================================
+    // TEST CASE
+    // =========================================================================
+     fn_con = get_gaussian_field_3d_wrapper_02<double,3>;
+
+    // =========================================================================
+    // SIMULATION PARAMETERS
+    // =========================================================================
+    sim_config->vtk_filename_prefix   = "advection";
+    sim_config->vtk_filename_variable = "conc02";
+    sim_config->bc                    = fmm_data.bndry;
+
+    // =========================================================================
+    // INIT THE CONCENTRATION TREE
+    // =========================================================================
+    tcurr = 0;
+    FMM_Tree_t tconc_curr(comm);
+    tbslas::ConstructTree<FMM_Tree_t>(sim_config->tree_num_point_sources,
+                                      sim_config->tree_num_points_per_octanct,
+                                      sim_config->tree_chebyshev_order,
+                                      sim_config->tree_max_depth,
+                                      sim_config->tree_adap,
+                                      sim_config->tree_tolerance,
+                                      comm,
+                                      fn_con,
+                                      1,
+                                      tconc_curr);
+    // char out_name_buffer[300];
+    if (sim_config->vtk_save) {
+      snprintf(out_name_buffer,
+               sizeof(out_name_buffer),
+               sim_config->vtk_filename_format.c_str(),
+               tbslas::get_result_dir().c_str(),
+               sim_config->vtk_filename_prefix.c_str(),
+               sim_config->vtk_filename_variable.c_str(),
+               0);
+      tconc_curr.Write2File(out_name_buffer, sim_config->vtk_order);
     }
 
-    int num_leaves = tbslas::CountNumLeafNodes(tconc_curr);
+    // =========================================================================
+    // RUN
+    // =========================================================================
+    // set the input_fn to NULL -> needed for adaptive refinement
+    std::vector<FMMNode_t*>  ncurr_list = tconc_curr.GetNodeList();
+    for(int i = 0; i < ncurr_list.size(); i++) {
+      ncurr_list[i]->input_fn = (void (*)(const double* , int , double*))NULL;
+    }
+
+    switch(merge) {
+      case 2:
+        pvfmm::Profile::Tic("CMerge", &sim_config->comm, false, 5);
+        tbslas::MergeTree(*tvel_curr, tconc_curr);
+        pvfmm::Profile::Toc();
+        break;
+      case 3:
+        pvfmm::Profile::Tic("SMerge", &sim_config->comm, false, 5);
+        tbslas::SemiMergeTree(*tvel_curr, tconc_curr);
+        pvfmm::Profile::Toc();
+        break;
+    }
 
     int timestep = 1;
     for (; timestep < sim_config->total_num_timestep+1; timestep++) {
@@ -1607,30 +1731,112 @@ int main(int argc,char **args){
 
     }  // end for
 
-    // =========================================================================
-    // COMPUTE ERROR
-    // =========================================================================
-    tcurr = sim_config->total_num_timestep*sim_config->dt;
-    double al2,rl2,ali,rli;
-    CheckChebOutput<FMM_Tree_t>(&tconc_curr,
-                                fn_con,
-                                1,
-                                al2,rl2,ali,rli,
-                                std::string("Output"));
-
-    // =========================================================================
-    // REPORT RESULTS
-    // =========================================================================
-    if(!myrank) {
-      Rep::AddData("OutAL2", al2);
-      Rep::AddData("OutRL2", rl2);
-      Rep::AddData("OutALINF", ali);
-      Rep::AddData("OutRLINF", rli);
-      Rep::Report();
-    }
     //Output Profiling results.
     pvfmm::Profile::print(&comm);
-  }
+   }
+
+   if (test == 1) {
+     // =========================================================================
+     // TEST CASE
+     // =========================================================================
+     fn_con = get_gaussian_field_3d_wrapper_03<double,3>;
+
+     // =========================================================================
+     // SIMULATION PARAMETERS
+     // =========================================================================
+     sim_config->vtk_filename_prefix   = "advection";
+     sim_config->vtk_filename_variable = "conc03";
+     sim_config->bc                    = fmm_data.bndry;
+
+     // =========================================================================
+     // INIT THE CONCENTRATION TREE
+     // =========================================================================
+     tcurr = 0;
+     FMM_Tree_t tconc_curr(comm);
+     tbslas::ConstructTree<FMM_Tree_t>(sim_config->tree_num_point_sources,
+                                       sim_config->tree_num_points_per_octanct,
+                                       sim_config->tree_chebyshev_order,
+                                       sim_config->tree_max_depth,
+                                       sim_config->tree_adap,
+                                       sim_config->tree_tolerance,
+                                       comm,
+                                       fn_con,
+                                       1,
+                                       tconc_curr);
+     // char out_name_buffer[300];
+     if (sim_config->vtk_save) {
+       snprintf(out_name_buffer,
+                sizeof(out_name_buffer),
+                sim_config->vtk_filename_format.c_str(),
+                tbslas::get_result_dir().c_str(),
+                sim_config->vtk_filename_prefix.c_str(),
+                sim_config->vtk_filename_variable.c_str(),
+                0);
+       tconc_curr.Write2File(out_name_buffer, sim_config->vtk_order);
+     }
+
+     // =========================================================================
+     // RUN
+     // =========================================================================
+     // set the input_fn to NULL -> needed for adaptive refinement
+     std::vector<FMMNode_t*>  ncurr_list = tconc_curr.GetNodeList();
+     for(int i = 0; i < ncurr_list.size(); i++) {
+       ncurr_list[i]->input_fn = (void (*)(const double* , int , double*))NULL;
+     }
+
+     switch(merge) {
+       case 2:
+         pvfmm::Profile::Tic("CMerge", &sim_config->comm, false, 5);
+         tbslas::MergeTree(*tvel_curr, tconc_curr);
+         pvfmm::Profile::Toc();
+         break;
+       case 3:
+         pvfmm::Profile::Tic("SMerge", &sim_config->comm, false, 5);
+         tbslas::SemiMergeTree(*tvel_curr, tconc_curr);
+         pvfmm::Profile::Toc();
+         break;
+     }
+
+     int timestep = 1;
+     for (; timestep < sim_config->total_num_timestep+1; timestep++) {
+
+       // (SEMI) MERGE TO FIX IMBALANCE
+       switch(merge) {
+         case 2:
+           pvfmm::Profile::Tic("CMerge", &sim_config->comm, false, 5);
+           tbslas::MergeTree(*tvel_curr, tconc_curr);
+           pvfmm::Profile::Toc();
+           break;
+         case 3:
+           pvfmm::Profile::Tic("SMerge", &sim_config->comm, false, 5);
+           tbslas::SemiMergeTree(*tvel_curr, tconc_curr);
+           pvfmm::Profile::Toc();
+           break;
+       }
+
+       pvfmm::Profile::Tic("SL", &sim_config->comm, false, 5);
+       tbslas::SolveSemilagInSitu(*tvel_curr,
+                                  tconc_curr,
+                                  timestep,
+                                  sim_config->dt,
+                                  sim_config->num_rk_step);
+       pvfmm::Profile::Toc();
+
+       // refine the tree according to the computed values
+       pvfmm::Profile::Tic("RefineTree", &sim_config->comm, false, 5);
+       tconc_curr.RefineTree();
+       pvfmm::Profile::Toc();
+
+       //Write2File
+       if (sim_config->vtk_save) {
+         tconc_curr.Write2File(tbslas::GetVTKFileName(timestep, sim_config->vtk_filename_variable).c_str(), sim_config->vtk_order);
+       }
+
+     }  // end for
+
+     //Output Profiling results.
+     pvfmm::Profile::print(&comm);
+   }
 
   // Delete fmm data
   FMMDestroy(&fmm_data);
