@@ -1537,7 +1537,7 @@ int main(int argc,char **args){
     // =========================================================================
     // SIMULATION PARAMETERS
     // =========================================================================
-    sim_config->vtk_filename_prefix   = "advection";
+    // sim_config->vtk_filename_prefix   = "advection";
     sim_config->vtk_filename_variable = "conc01";
     sim_config->bc                    = fmm_data.bndry;
 
@@ -1562,7 +1562,7 @@ int main(int argc,char **args){
                sizeof(out_name_buffer),
                sim_config->vtk_filename_format.c_str(),
                tbslas::get_result_dir().c_str(),
-               sim_config->vtk_filename_prefix.c_str(),
+               // sim_config->vtk_filename_prefix.c_str(),
                sim_config->vtk_filename_variable.c_str(),
                0);
       tconc_curr.Write2File(out_name_buffer, sim_config->vtk_order);
@@ -1641,7 +1641,7 @@ int main(int argc,char **args){
     // =========================================================================
     // SIMULATION PARAMETERS
     // =========================================================================
-    sim_config->vtk_filename_prefix   = "advection";
+    // sim_config->vtk_filename_prefix   = "advection";
     sim_config->vtk_filename_variable = "conc02";
     sim_config->bc                    = fmm_data.bndry;
 
@@ -1666,7 +1666,7 @@ int main(int argc,char **args){
                sizeof(out_name_buffer),
                sim_config->vtk_filename_format.c_str(),
                tbslas::get_result_dir().c_str(),
-               sim_config->vtk_filename_prefix.c_str(),
+               // sim_config->vtk_filename_prefix.c_str(),
                sim_config->vtk_filename_variable.c_str(),
                0);
       tconc_curr.Write2File(out_name_buffer, sim_config->vtk_order);
@@ -1744,7 +1744,7 @@ int main(int argc,char **args){
      // =========================================================================
      // SIMULATION PARAMETERS
      // =========================================================================
-     sim_config->vtk_filename_prefix   = "advection";
+     // sim_config->vtk_filename_prefix   = "advection";
      sim_config->vtk_filename_variable = "conc03";
      sim_config->bc                    = fmm_data.bndry;
 
@@ -1769,7 +1769,7 @@ int main(int argc,char **args){
                 sizeof(out_name_buffer),
                 sim_config->vtk_filename_format.c_str(),
                 tbslas::get_result_dir().c_str(),
-                sim_config->vtk_filename_prefix.c_str(),
+                // sim_config->vtk_filename_prefix.c_str(),
                 sim_config->vtk_filename_variable.c_str(),
                 0);
        tconc_curr.Write2File(out_name_buffer, sim_config->vtk_order);
