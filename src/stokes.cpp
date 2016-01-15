@@ -1557,12 +1557,11 @@ int main(int argc,char **args){
                                       1,
                                       tconc_curr);
     // char out_name_buffer[300];
-    if (sim_config->vtk_save) {
+    if (sim_config->vtk_save_rate) {
       snprintf(out_name_buffer,
                sizeof(out_name_buffer),
                sim_config->vtk_filename_format.c_str(),
                tbslas::get_result_dir().c_str(),
-               // sim_config->vtk_filename_prefix.c_str(),
                sim_config->vtk_filename_variable.c_str(),
                0);
       tconc_curr.Write2File(out_name_buffer, sim_config->vtk_order);
@@ -1621,7 +1620,8 @@ int main(int argc,char **args){
       pvfmm::Profile::Toc();
 
       //Write2File
-      if (sim_config->vtk_save) {
+      if (sim_config->vtk_save_rate) {
+        if (timestep % sim_config->vtk_save_rate == 0)
         tconc_curr.Write2File(tbslas::GetVTKFileName(timestep, sim_config->vtk_filename_variable).c_str(), sim_config->vtk_order);
       }
 
@@ -1661,12 +1661,11 @@ int main(int argc,char **args){
                                       1,
                                       tconc_curr);
     // char out_name_buffer[300];
-    if (sim_config->vtk_save) {
+    if (sim_config->vtk_save_rate) {
       snprintf(out_name_buffer,
                sizeof(out_name_buffer),
                sim_config->vtk_filename_format.c_str(),
                tbslas::get_result_dir().c_str(),
-               // sim_config->vtk_filename_prefix.c_str(),
                sim_config->vtk_filename_variable.c_str(),
                0);
       tconc_curr.Write2File(out_name_buffer, sim_config->vtk_order);
@@ -1725,8 +1724,10 @@ int main(int argc,char **args){
       pvfmm::Profile::Toc();
 
       //Write2File
-      if (sim_config->vtk_save) {
-        tconc_curr.Write2File(tbslas::GetVTKFileName(timestep, sim_config->vtk_filename_variable).c_str(), sim_config->vtk_order);
+      if (sim_config->vtk_save_rate) {
+        if (timestep % sim_config->vtk_save_rate == 0)
+          tconc_curr.Write2File(tbslas::GetVTKFileName(timestep, sim_config->vtk_filename_variable).c_str(),
+                                sim_config->vtk_order);
       }
 
     }  // end for
@@ -1763,13 +1764,12 @@ int main(int argc,char **args){
                                        fn_con,
                                        1,
                                        tconc_curr);
-     // char out_name_buffer[300];
-     if (sim_config->vtk_save) {
+
+     if (sim_config->vtk_save_rate) {
        snprintf(out_name_buffer,
                 sizeof(out_name_buffer),
                 sim_config->vtk_filename_format.c_str(),
                 tbslas::get_result_dir().c_str(),
-                // sim_config->vtk_filename_prefix.c_str(),
                 sim_config->vtk_filename_variable.c_str(),
                 0);
        tconc_curr.Write2File(out_name_buffer, sim_config->vtk_order);
@@ -1828,8 +1828,9 @@ int main(int argc,char **args){
        pvfmm::Profile::Toc();
 
        //Write2File
-       if (sim_config->vtk_save) {
-         tconc_curr.Write2File(tbslas::GetVTKFileName(timestep, sim_config->vtk_filename_variable).c_str(), sim_config->vtk_order);
+       if (sim_config->vtk_save_rate) {
+         if (timestep % sim_config->vtk_save_rate == 0)
+           tconc_curr.Write2File(tbslas::GetVTKFileName(timestep, sim_config->vtk_filename_variable).c_str(), sim_config->vtk_order);
        }
 
      }  // end for
