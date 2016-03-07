@@ -59,7 +59,7 @@ PetscInt   ERROR_RESOLUTION = 1;
 PetscInt   VTK_ORDER        = 8;
 PetscInt   INPUT_DOF        = 3;
 PetscReal  SCAL_EXP         = 1.0;
-PetscBool  PERIODIC         = PETSC_FALSE;
+PetscBool  PERIODIC         = PETSC_TRUE;
 PetscBool  TREE_ONLY        = PETSC_FALSE;
 
 PetscInt   MAXDEPTH         = MAX_DEPTH; // Maximum tree depth
@@ -172,7 +172,7 @@ get_gaussian_field_3d_wrapper_01(const real_t* points_pos,
   real_t sigma_y = 0.06;
   real_t sigma_z = 0.06;
 
-  get_gaussian_position <real_t>(0.7, 1, 0.2, 0.5, 0.4, 0.7, xc, yc, zc);
+  get_gaussian_position <real_t>(0.6, 0.7, 0.4, 0.6, 0.4, 0.6, xc, yc, zc);
 
   tbslas::get_gaussian_field_3d<real_t,sdim>(points_pos, num_points, out,
                                               xc, yc, zc,
@@ -195,7 +195,7 @@ get_gaussian_field_3d_wrapper_02(const real_t* points_pos,
   real_t sigma_y = 0.06;
   real_t sigma_z = 0.06;
 
-  get_gaussian_position <real_t>(0.7, 1, 0.7, 0.9, 0.4, 0.7, xc, yc, zc);
+  get_gaussian_position <real_t>(0.5, 0.7, 0.2, 0.4, 0.6, 0.8, xc, yc, zc);
 
   tbslas::get_gaussian_field_3d<real_t,sdim>(points_pos, num_points, out,
                                               xc, yc, zc,
@@ -217,7 +217,7 @@ get_gaussian_field_3d_wrapper_03(const real_t* points_pos,
   real_t sigma_y = 0.06;
   real_t sigma_z = 0.06;
 
-  get_gaussian_position <real_t>(0.7, 1, 0.6, 0.9, 0.7, 0.9, xc, yc, zc);
+  get_gaussian_position <real_t>(0.5, 0.7, 0.5, 0.85, 0.2, 0.4, xc, yc, zc);
 
   tbslas::get_gaussian_field_3d<real_t,sdim>(points_pos, num_points, out,
                                              xc, yc, zc,
